@@ -67,14 +67,16 @@
     <ClCompile Include="iMain.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="boats.hpp" />
-    <ClInclude Include="Boat.hpp" />
-    <ClInclude Include="entities.hpp" />
-    <ClInclude Include="levels.hpp" />
-    <ClInclude Include="environment.hpp" />
-    <ClInclude Include="menu.hpp" />
-    <ClInclude Include="player.hpp" />
     <ClInclude Include="utility.hpp" />
+    <ClInclude Include="sound.hpp" />
+    <ClInclude Include="scores.hpp" />
+    <ClInclude Include="player.hpp" />
+    <ClInclude Include="entities.hpp" />
+    <ClInclude Include="boat.hpp" />
+    <ClInclude Include="environment.hpp" />
+    <ClInclude Include="hud.hpp" />
+    <ClInclude Include="levels.hpp" />
+    <ClInclude Include="menu.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

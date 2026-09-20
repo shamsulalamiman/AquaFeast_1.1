@@ -1,1280 +1,409 @@
-#ifndef MENU_H
-#define MENU_H
-
-// ============================================================
-// 1. INCLUDES
-// ============================================================
-
-#include <windows.h>
-#include <mmsystem.h>
+#ifndef MENU_HPP
+#define MENU_HPP
+// =====================================================================
+// menu.hpp - every screen that is NOT gameplay.
+//
+//   SPLASH -> MENU -> (Start) -> NAME -> CHARACTER -> MAP -> gameplay
+//                  -> Instructions / Scores / Credits / Exit
+//
+// The menu has a living background: the same ocean and fish from the
+// game swim behind the buttons. They cannot be steered, but clicking a
+// fish makes it change place rapidly.
+// =====================================================================
 #include "utility.hpp"
-#include "player.hpp"
+#include "sound.hpp"
+#include "scores.hpp"
+#include "environment.hpp"
+#include "entities.hpp"
+#include "levels.hpp"
 
+// ==== 1. MENU ITEMS ====
+#define MENU_COUNT 5
+const char* menuLabels[MENU_COUNT] = { "START", "INSTRUCTIONS", "SCORES", "CREDITS", "EXIT" };
+int menuIndex = 0;
 
-// ============================================================
-// 2. CONSTANTS
-// ============================================================
+int splashImage, helpImage, creditsImage, winImage, loseImage;
+int splashTicks = 0;               // how long the splash has been showing
+const int SPLASH_LENGTH = 150;     // ~4.5 seconds at a 30ms tick
 
-#define HOME_ITEM_COUNT   4
-#define LEVEL_ITEM_COUNT  4
+// Key edge-detectors (one per key we care about).
+bool kUp = false, kDown = false, kLeft = false, kRight = false;
+bool kEnter = false, kBack = false, kSpace = false;
 
-
-// ============================================================
-// 3. GLOBAL STATE
-// ============================================================
-
-extern int bgImage;
-
-int instructionImage;
-int creditImage;
-
-// 3 distinct character selection images
-int menuCharacterSprites[3];
-
-const char* homeMenuLabels[HOME_ITEM_COUNT] =
-{
-	"Start Game",
-	"Instructions",
-	"Credits",
-	"Exit"
+// ==== 2. MENU BACKGROUND FISH ====
+// These are separate from the gameplay fish so entering a level never
+// disturbs them. They just swim in screen space, looping around.
+#define MENU_FISH 14
+struct MenuFish {
+	double x, y, dx, dy, size;
+	int look;
+	bool faceLeft;
+	int dartTicks;      // >0 while darting away from a mouse click
 };
+MenuFish menuFish[MENU_FISH];
 
-const char* levelMenuLabels[LEVEL_ITEM_COUNT] =
-{
-	"Level 1",
-	"Level 2",
-	"Level 3",
-	"Back"
-};
-
-int selectedHomeIndex = 0;
-int selectedLevelIndex = 0;
-
-
-// Keyboard state
-bool wasUp = false;
-bool wasDown = false;
-bool wasEnter = false;
-bool wasBack = false;
-bool wasLeft = false;
-bool wasRight = false;
-
-
-// ============================================================
-// 4. MENU IMAGES
-// ============================================================
-
-void loadMenuImages()
-{
-	instructionImage =
-		iLoadImage("Images/instruction.png");
-
-	creditImage =
-		iLoadImage("Images/credit.png");
-
-	// Load 3 distinct character images side-by-side for character selection
-	menuCharacterSprites[0] = iLoadImage("Images/Character/fish_character_01_right.png");
-	if (menuCharacterSprites[0] == 0) menuCharacterSprites[0] = iLoadImage("Images/Character/fish_character_01.png");
-
-	menuCharacterSprites[1] = iLoadImage("Images/Character/fish_character_02_right.png");
-	if (menuCharacterSprites[1] == 0) menuCharacterSprites[1] = iLoadImage("Images/Character/fish_character_02.png");
-
-	menuCharacterSprites[2] = iLoadImage("Images/Character/fish_character_03_right.png");
-	if (menuCharacterSprites[2] == 0) menuCharacterSprites[2] = iLoadImage("Images/Character/fish_character_03.png");
-
-	// Sync with player characters so chosen fish is ready for gameplay
-	playerCharacterSprites[0] = menuCharacterSprites[0];
-	playerCharacterSprites[1] = menuCharacterSprites[1];
-	playerCharacterSprites[2] = menuCharacterSprites[2];
+void setupMenuFish() {
+	for (int i = 0; i < MENU_FISH; i++) {
+		menuFish[i].x = randRange(0, SCREEN_W);
+		menuFish[i].y = randRange(60, SEA_Y - 60);
+		menuFish[i].dx = randRange(-1.4, 1.4);
+		menuFish[i].dy = randRange(-0.4, 0.4);
+		menuFish[i].size = randRange(16, 34);
+		menuFish[i].look = rand() % PREY_LOOKS;
+		menuFish[i].faceLeft = menuFish[i].dx < 0;
+		menuFish[i].dartTicks = 0;
+	}
 }
 
+void updateMenuFish() {
+	for (int i = 0; i < MENU_FISH; i++) {
+		MenuFish &f = menuFish[i];
 
-// ============================================================
-// 5. SOUND
-// ============================================================
+		// Increased darting speed significantly for rapid movement
+		double speed = (f.dartTicks > 0) ? 8.0 : 1.0;
 
-void loadSounds()
-{
-	mciSendString(
-		"open \"Sound/button.mp3\" type mpegvideo alias btnSound",
-		NULL, 0, NULL);
+		f.x += f.dx * speed;
+		f.y += f.dy * speed;
+		if (f.dartTicks > 0) f.dartTicks--;
 
-	mciSendString(
-		"open \"Sound/eat.mp3\" type mpegvideo alias eatSound",
-		NULL, 0, NULL);
+		// Loop around the screen edges.
+		if (f.x < -60) f.x = SCREEN_W + 50;
+		if (f.x > SCREEN_W + 60) f.x = -50;
+		f.y = clampD(f.y, 50, SEA_Y - 50);
+		if (f.y <= 50 || f.y >= SEA_Y - 50) f.dy = -f.dy;
 
-	mciSendString(
-		"open \"Sound/collect.mp3\" type mpegvideo alias collectSound",
-		NULL, 0, NULL);
-
-	mciSendString(
-		"open \"Sound/win.mp3\" type mpegvideo alias winSound",
-		NULL, 0, NULL);
-
-	mciSendString(
-		"open \"Sound/lose.mp3\" type mpegvideo alias loseSound",
-		NULL, 0, NULL);
-
-	mciSendString(
-		"open \"Sound/bgMusic.mp3\" type mpegvideo alias bgm",
-		NULL, 0, NULL);
-
-	// Menu music
-	mciSendString(
-		"open \"Sound/gamestart.mp3\" type mpegvideo alias menuMusic",
-		NULL, 0, NULL);
+		f.faceLeft = f.dx < 0;
+	}
 }
 
+// Clicking a fish teleports it rapidly to a new place and makes it dart.
+void clickMenuFish(double mx, double my) {
+	double y = SCREEN_H - my;   // mouse y is measured from the top
+	for (int i = 0; i < MENU_FISH; i++) {
+		MenuFish &f = menuFish[i];
+		if (!touching(mx, y, 4, f.x, f.y, f.size + 10)) continue;
 
-// ============================================================
-// PLAY SOUND
-// ============================================================
+		// Rapidly change place (Teleport to a new random location)
+		f.x = randRange(100, SCREEN_W - 100);
+		f.y = randRange(100, SEA_Y - 100);
 
-void playSound(const char* alias)
-{
-	if (isMuted)
+		// Pick a new random angle to burst out from the new location
+		double angle = randRange(0, 6.283);
+		f.dx = cos(angle) * 2.0;
+		f.dy = sin(angle) * 1.0;
+		f.dartTicks = 25; // Brief but rapid speed boost
+
+		playButton();
 		return;
-
-	char cmd[64];
-
-	sprintf_s(
-		cmd,
-		"play %s from 0",
-		alias);
-
-	mciSendString(
-		cmd,
-		NULL,
-		0,
-		NULL);
-}
-
-
-void playButtonSound()
-{
-	playSound("btnSound");
-}
-
-void playEatSound()
-{
-	playSound("eatSound");
-}
-
-void playCollectSound()
-{
-	playSound("collectSound");
-}
-
-void playWinSound()
-{
-	playSound("winSound");
-}
-
-void playLoseSound()
-{
-	playSound("loseSound");
-}
-
-
-// ============================================================
-// MUSIC
-// ============================================================
-
-void startGameplayMusic()
-{
-	if (!isMuted)
-	{
-		mciSendString(
-			"play bgm from 0 repeat",
-			NULL,
-			0,
-			NULL);
 	}
 }
 
-
-void stopGameplayMusic()
-{
-	mciSendString(
-		"stop bgm",
-		NULL,
-		0,
-		NULL);
-}
-
-
-void startMenuMusic()
-{
-	if (!isMuted)
-	{
-		mciSendString(
-			"play menuMusic from 0 repeat",
-			NULL,
-			0,
-			NULL);
+void drawMenuFish() {
+	for (int i = 0; i < MENU_FISH; i++) {
+		MenuFish &f = menuFish[i];
+		double s = f.size * 2.0;
+		int sprite = f.faceLeft ? preyLeft[f.look] : preyRight[f.look];
+		iShowImage((int)(f.x - s / 2), (int)(f.y - s / 2), (int)s, (int)s, sprite);
 	}
 }
 
+// The menu's living ocean: same scenery as level 1, plus the fish.
+void drawMenuBackdrop() {
+	int saved = currentLevel;
+	currentLevel = 1;          // always show the bright sunny ocean
+	drawEnvironment();
+	currentLevel = saved;
+	drawMenuFish();
 
-void stopMenuMusic()
-{
-	mciSendString(
-		"stop menuMusic",
-		NULL,
-		0,
-		NULL);
+	// Dark veil so the buttons stay readable over the busy scene.
+	glColor4f(0.0f, 0.02f, 0.06f, 0.45f);
+	iFilledRectangle(0, 0, SCREEN_W, SCREEN_H);
+	glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
+// ==== 3. LOADING ====
+void loadMenuImages() {
+	splashImage = loadImg("Images/splash.png", "Images/backgroundImage.png");
+	helpImage = loadImg("Images/instruction.png");
+	creditsImage = loadImg("Images/credit.png");
+	winImage = loadImg("Images/win.png");
+	loseImage = loadImg("Images/gameover.png");
+	setupMenuFish();
+}
 
-// ============================================================
-// MUTE
-// ============================================================
+// ==== 4. SHARED WIDGETS ====
+// One button row, highlighted when selected. Used by the menu and map.
+void drawButton(double cx, double y, double w, const char* label, bool selected, bool locked) {
+	double x = cx - w / 2;
+	if (locked)        drawPanel(x, y, w, 52, 40, 40, 48, 90, 90, 100);
+	else if (selected) drawPanel(x, y, w, 52, 40, 150, 210, 200, 240, 255);
+	else               drawPanel(x, y, w, 52, 18, 40, 62, 90, 130, 170);
 
-void toggleMute()
-{
-	isMuted = !isMuted;
+	int r = locked ? 130 : 255, g = locked ? 130 : 255, b = locked ? 140 : 255;
+	if (selected && !locked) { r = 10; g = 20; b = 30; }
 
-	if (isMuted)
-	{
-		stopGameplayMusic();
-		stopMenuMusic();
-	}
-	else if (isPlaying)
-	{
-		startGameplayMusic();
-	}
-	else if (isInMenu)
-	{
+	iSetColor(r, g, b);
+	iText((int)(cx - strlen(label) * 4.5), (int)(y + 20), (char*)label, GAME_FONT);
+}
+
+void drawHint(const char* text) {
+	drawText(SCREEN_W / 2.0 - strlen(text) * 4.5, 50, text, 190, 210, 230);
+}
+
+void drawTitle(const char* text) {
+	drawText(SCREEN_W / 2.0 - strlen(text) * 7.0, SCREEN_H - 170, text, 255, 240, 170, BIG_FONT);
+}
+
+// ==== 5. SPLASH SCREEN ====
+// A loading page shown once at startup, over a full-screen background.
+void drawSplash() {
+	iShowImage(0, 0, SCREEN_W, SCREEN_H, splashImage);
+
+	double barW = 520, barH = 22;
+	double x = SCREEN_W / 2.0 - barW / 2, y = 150;
+	double pct = (double)splashTicks / SPLASH_LENGTH;
+
+	drawPanel(x, y, barW, barH, 12, 18, 28, 190, 215, 235);
+	iSetColor(70, 200, 230);
+	iFilledRectangle(x + 2, y + 2, (barW - 4) * clampD(pct, 0, 1), barH - 4);
+
+	char buf[48];
+	sprintf_s(buf, "LOADING  %d%%", (int)(pct * 100));
+	drawText(SCREEN_W / 2.0 - 52, y + barH + 22, buf, 235, 245, 255);
+	drawText(SCREEN_W / 2.0 - 96, y - 34, "press ENTER to skip", 170, 190, 210);
+}
+
+void updateSplash() {
+	splashTicks++;
+	bool skip = tapped(isKeyPressed(KEY_ENTER) != 0, kEnter);
+	if (splashTicks >= SPLASH_LENGTH || skip) {
+		screen = SCR_MENU;
 		startMenuMusic();
 	}
 }
 
-
-// ============================================================
-// GAME OVER
-// ============================================================
-
-void triggerGameOver()
-{
-	if (isGameOver)
-		return;
-
-	isGameOver = true;
-
-	playLoseSound();
-
-	stopGameplayMusic();
-}
-
-
-// ============================================================
-// HOME MENU INITIALIZATION
-// ============================================================
-
-void homeMenuInitialize()
-{
-	stats = GameStats();
-
-	currentLevel = 1;
-
-	currentMenuScreen = MENU_HOME;
-
-	gameState = MENU;
-
-	selectedHomeIndex = 0;
-
-	selectedLevelIndex = 0;
-
-	// No fish selected initially
-	selectedCharacter = -1;
-
-	startMenuMusic();
-}
-
-
-// ============================================================
-// RETURN TO HOME MENU
-// ============================================================
-
-void returnToHomeMenu()
-{
-	isInMenu = true;
-
-	isPlaying = false;
-
-	isGameOver = false;
-
-	isLevelComplete = false;
-
-	currentMenuScreen = MENU_HOME;
-
-	gameState = MENU;
-
-	selectedHomeIndex = 0;
-
-	selectedLevelIndex = 0;
-
-	selectedCharacter = -1;
-
-	stopGameplayMusic();
-
-	startMenuMusic();
-}
-
-
-// ============================================================
-// START LEVEL
-// ============================================================
-
-void requestStartLevel(int levelNumber)
-{
-	currentLevel = levelNumber;
-
-	isInMenu = false;
-
-	isPlaying = true;
-
-	gameState = PLAYING;
-
-	requestLevelStart = true;
-
-	stopMenuMusic();
-
-	startGameplayMusic();
-}
-
-
-// ============================================================
-// 6. HOME MENU INPUT
-// ============================================================
-
-void handleHomeInput(
-	bool up,
-	bool down,
-	bool enter)
-{
-	if (up)
-	{
-		selectedHomeIndex =
-			(selectedHomeIndex - 1 + HOME_ITEM_COUNT)
-			% HOME_ITEM_COUNT;
-	}
-
-	if (down)
-	{
-		selectedHomeIndex =
-			(selectedHomeIndex + 1)
-			% HOME_ITEM_COUNT;
-	}
-
-	if (!enter)
-		return;
-
-
-	// START GAME
-	if (selectedHomeIndex == 0)
-	{
-		selectedCharacter = -1;
-
-		currentMenuScreen =
-			MENU_CHARACTER_SELECT;
-
-		gameState =
-			CHARACTER_SELECT;
-	}
-
-
-	// INSTRUCTIONS
-	else if (selectedHomeIndex == 1)
-	{
-		currentMenuScreen =
-			MENU_INSTRUCTIONS;
-	}
-
-
-	// CREDITS
-	else if (selectedHomeIndex == 2)
-	{
-		currentMenuScreen =
-			MENU_CREDITS;
-	}
-
-
-	// EXIT
-	else if (selectedHomeIndex == 3)
-	{
-		exit(0);
-	}
-}
-
-
-// ============================================================
-// 7. LEVEL SELECTION INPUT
-// ============================================================
-
-void handleLevelSelectInput(
-	bool up,
-	bool down,
-	bool enter,
-	bool back)
-{
-	if (up)
-	{
-		selectedLevelIndex =
-			(selectedLevelIndex - 1 + LEVEL_ITEM_COUNT)
-			% LEVEL_ITEM_COUNT;
-	}
-
-	if (down)
-	{
-		selectedLevelIndex =
-			(selectedLevelIndex + 1)
-			% LEVEL_ITEM_COUNT;
-	}
-
-
-	// ENTER
-	if (enter)
-	{
-		// BACK option
-		if (selectedLevelIndex == 3)
-		{
-			currentMenuScreen =
-				MENU_CHARACTER_SELECT;
-
-			gameState =
-				CHARACTER_SELECT;
-		}
-
-		// LEVEL 1, 2 or 3
-		else
-		{
-			requestStartLevel(
-				selectedLevelIndex + 1);
-		}
-	}
-
-
-	// BACKSPACE
-	if (back)
-	{
-		currentMenuScreen =
-			MENU_CHARACTER_SELECT;
-
-		gameState =
-			CHARACTER_SELECT;
-	}
-}
-
-
-// ============================================================
-// 8. CHARACTER SELECTION INPUT
-// ============================================================
-
-void handleCharacterSelectInput(
-	bool left,
-	bool right,
-	bool enter,
-	bool back)
-{
-	// LEFT
-	if (left)
-	{
-		if (selectedCharacter <= 0)
-		{
-			selectedCharacter = 2;
-		}
-		else
-		{
-			selectedCharacter--;
-		}
-	}
-
-
-	// RIGHT
-	if (right)
-	{
-		if (selectedCharacter == -1 ||
-			selectedCharacter >= 2)
-		{
-			selectedCharacter = 0;
-		}
-		else
-		{
-			selectedCharacter++;
-		}
-	}
-
-
-	// ENTER
-	// IMPORTANT:
-	// DO NOT START LEVEL 1 HERE.
-	// Go to LEVEL SELECTION instead.
-	if (enter && selectedCharacter != -1)
-	{
-		selectedLevelIndex = 0;
-
-		currentMenuScreen =
-			MENU_LEVEL_SELECT;
-
-		gameState =
-			MENU;
-	}
-
-
-	// BACKSPACE
-	if (back)
-	{
-		currentMenuScreen =
-			MENU_HOME;
-
-		gameState =
-			MENU;
-	}
-}
-
-
-// ============================================================
-// 9. CHARACTER SELECTION MOUSE
-// ============================================================
-
-void handleCharacterSelectMouse(
-	int mx,
-	int my)
-{
-	if (currentMenuScreen != MENU_CHARACTER_SELECT &&
-		gameState != CHARACTER_SELECT)
-	{
-		return;
-	}
-
-
-	// ========================================================
-	// FISH 1
-	// ========================================================
-
-	if (mx >= 280 &&
-		mx <= 460 &&
-		my >= 280 &&
-		my <= 480)
-	{
-		selectedCharacter = 0;
-
-		playButtonSound();
-	}
-
-
-	// ========================================================
-	// FISH 2
-	// ========================================================
-
-	else if (mx >= 550 &&
-		mx <= 730 &&
-		my >= 280 &&
-		my <= 480)
-	{
-		selectedCharacter = 1;
-
-		playButtonSound();
-	}
-
-
-	// ========================================================
-	// FISH 3
-	// ========================================================
-
-	else if (mx >= 820 &&
-		mx <= 1000 &&
-		my >= 280 &&
-		my <= 480)
-	{
-		selectedCharacter = 2;
-
-		playButtonSound();
-	}
-
-
-	// ========================================================
-	// CONTINUE
-	// ========================================================
-
-	else if (mx >= 515 &&
-		mx <= 765 &&
-		my >= 180 &&
-		my <= 230)
-	{
-		if (selectedCharacter != -1)
-		{
-			playButtonSound();
-
-			// Go to level selection
-			selectedLevelIndex = 0;
-
-			currentMenuScreen =
-				MENU_LEVEL_SELECT;
-
-			gameState =
-				MENU;
-		}
-	}
-
-
-	// ========================================================
-	// BACK
-	// ========================================================
-
-	else if (mx >= 540 &&
-		mx <= 740 &&
-		my >= 105 &&
-		my <= 150)
-	{
-		playButtonSound();
-
-		currentMenuScreen =
-			MENU_HOME;
-
-		gameState =
-			MENU;
-	}
-}
-
-
-// ============================================================
-// 10. MENU NAVIGATION
-// ============================================================
-
-void updateMenuNavigation()
-{
-	if (!isInMenu)
-		return;
-
-
-	bool up =
-		wasJustPressed(
-		isSpecialKeyPressed(GLUT_KEY_UP),
-		wasUp);
-
-	bool down =
-		wasJustPressed(
-		isSpecialKeyPressed(GLUT_KEY_DOWN),
-		wasDown);
-
-	bool left =
-		wasJustPressed(
-		isSpecialKeyPressed(GLUT_KEY_LEFT),
-		wasLeft);
-
-	bool right =
-		wasJustPressed(
-		isSpecialKeyPressed(GLUT_KEY_RIGHT),
-		wasRight);
-
-	bool enter =
-		wasJustPressed(
-		isKeyPressed(KEY_ENTER),
-		wasEnter);
-
-	bool back =
-		wasJustPressed(
-		isKeyPressed(KEY_BACKSPACE),
-		wasBack);
-
-
-	if (up ||
-		down ||
-		left ||
-		right ||
-		enter ||
-		back)
-	{
-		playButtonSound();
-	}
-
-
-	// HOME
-	if (currentMenuScreen == MENU_HOME)
-	{
-		handleHomeInput(
-			up,
-			down,
-			enter);
-	}
-
-
-	// LEVEL SELECT
-	else if (currentMenuScreen == MENU_LEVEL_SELECT)
-	{
-		handleLevelSelectInput(
-			up,
-			down,
-			enter,
-			back);
-	}
-
-
-	// CHARACTER SELECT
-	else if (currentMenuScreen == MENU_CHARACTER_SELECT)
-	{
-		handleCharacterSelectInput(
-			left,
-			right,
-			enter,
-			back);
-	}
-
-
-	// INSTRUCTIONS / CREDITS
-	else if (back)
-	{
-		currentMenuScreen =
-			MENU_HOME;
-
-		gameState =
-			MENU;
-	}
-}
-
-
-// ============================================================
-// 11. MENU BACKGROUND
-// ============================================================
-
-void drawMenuBackdrop()
-{
-	iShowImage(
-		0,
-		0,
-		SCREEN_WIDTH,
-		SCREEN_HEIGHT,
-		bgImage);
-}
-
-
-// ============================================================
-// 12. DRAW SELECTABLE LIST
-// ============================================================
-
-void drawSelectableList(
-	const char* items[],
-	int itemCount,
-	int selectedIndex)
-{
-	int startY = 420;
-
-	int spacing = 55;
-
-
-	for (int i = 0;
-		i < itemCount;
-		i++)
-	{
-		int y =
-			startY -
-			i * spacing;
-
-
-		if (i == selectedIndex)
-		{
-			iSetColor(
-				80,
-				200,
-				255);
-
-			iFilledRectangle(
-				SCREEN_WIDTH / 2 - 130,
-				y - 12,
-				260,
-				38);
-
-			iSetColor(
-				10,
-				10,
-				20);
-		}
-		else
-		{
-			iSetColor(
-				255,
-				255,
-				255);
-		}
-
-
-		iText(
-			SCREEN_WIDTH / 2 - 100,
-			y,
-			(char*)items[i],
-			GAME_FONT);
-	}
-}
-
-
-// ============================================================
-// 13. HOME MENU DRAW
-// ============================================================
-
-void drawHomeMenu()
-{
+// ==== 6. MAIN MENU ====
+void drawMenu() {
 	drawMenuBackdrop();
+	drawTitle("A Q U A F E A S T");
 
-	drawSelectableList(
-		homeMenuLabels,
-		HOME_ITEM_COUNT,
-		selectedHomeIndex);
+	for (int i = 0; i < MENU_COUNT; i++)
+		drawButton(SCREEN_W / 2.0, SCREEN_H - 300 - i * 68, 340, menuLabels[i], i == menuIndex, false);
+
+	char buf[64];
+	sprintf_s(buf, "BEST SCORE: %d", bestScore());
+	drawText(SCREEN_W / 2.0 - 70, 110, buf, 255, 225, 120);
+	drawHint("UP / DOWN to move    ENTER to select    click a fish to scare it");
 }
 
+void openMenuChoice() {
+	if (menuIndex == 0) { playerName[0] = '\0'; screen = SCR_NAME; }
+	else if (menuIndex == 1) screen = SCR_HELP;
+	else if (menuIndex == 2) screen = SCR_SCORES;
+	else if (menuIndex == 3) screen = SCR_CREDITS;
+	else exit(0);
+}
 
-// ============================================================
-// 14. LEVEL SELECT MENU DRAW
-// ============================================================
+void updateMenu() {
+	if (tapped(isSpecialKeyPressed(GLUT_KEY_UP) != 0, kUp)) {
+		menuIndex = (menuIndex - 1 + MENU_COUNT) % MENU_COUNT;
+		playButton();
+	}
+	if (tapped(isSpecialKeyPressed(GLUT_KEY_DOWN) != 0, kDown)) {
+		menuIndex = (menuIndex + 1) % MENU_COUNT;
+		playButton();
+	}
+	if (tapped(isKeyPressed(KEY_ENTER) != 0, kEnter)) {
+		playButton();
+		openMenuChoice();
+	}
+}
 
-void drawLevelSelectMenu()
-{
+// ==== 7. NICKNAME ENTRY ====
+// Letters and digits are collected in iKeyboard() (see iMain.cpp).
+void drawNameEntry() {
 	drawMenuBackdrop();
+	drawTitle("ENTER YOUR NICKNAME");
 
+	double boxW = 520, x = SCREEN_W / 2.0 - boxW / 2, y = SCREEN_H / 2.0;
+	drawPanel(x, y, boxW, 60, 12, 26, 40, 120, 190, 230);
 
-	drawPixelTitle(
-		SCREEN_WIDTH / 2 - 38,
-		500,
-		"LEVELS",
-		255,
-		255,
-		255);
+	// A blinking cursor after whatever has been typed so far.
+	char shown[32];
+	sprintf_s(shown, "%s%s", playerName, ((splashTicks / 12) % 2 == 0) ? "_" : " ");
+	drawText(x + 24, y + 22, shown, 255, 255, 255, BIG_FONT);
 
-
-	drawSelectableList(
-		levelMenuLabels,
-		LEVEL_ITEM_COUNT,
-		selectedLevelIndex);
-
-
-	iSetColor(
-		200,
-		200,
-		200);
-
-
-	iText(
-		SCREEN_WIDTH / 2 - 200,
-		60,
-		"UP/DOWN to move   ENTER to select   BACKSPACE to go back",
-		GAME_FONT);
+	drawText(SCREEN_W / 2.0 - 190, y - 60, "one word, letters and numbers only", 180, 200, 220);
+	drawHint("ENTER to continue    BACKSPACE to erase / go back");
 }
 
+void updateNameEntry() {
+	splashTicks++;   // reused purely to blink the cursor
 
-// ============================================================
-// 15. INSTRUCTIONS
-// ============================================================
-
-void drawInstructionsMenu()
-{
-	iShowImage(
-		0,
-		0,
-		SCREEN_WIDTH,
-		SCREEN_HEIGHT,
-		instructionImage);
-
-
-	iSetColor(
-		200,
-		200,
-		200);
-
-
-	iText(
-		SCREEN_WIDTH / 2 - 100,
-		40,
-		"BACKSPACE to go back",
-		GAME_FONT);
+	if (tapped(isKeyPressed(KEY_ENTER) != 0, kEnter)) {
+		if (playerName[0] == '\0') return;   // a name is required
+		playButton();
+		screen = SCR_CHARACTER;
+	}
 }
 
+// ==== 8. CHARACTER SELECT ====
+int skinIndex = 0;
+const char* skinNames[3] = { "REEF DARTER", "CORAL GLIDER", "DEEP RUNNER" };
 
-// ============================================================
-// 16. CREDITS
-// ============================================================
-
-void drawCreditsMenu()
-{
-	iShowImage(
-		0,
-		0,
-		SCREEN_WIDTH,
-		SCREEN_HEIGHT,
-		creditImage);
-
-
-	iSetColor(
-		200,
-		200,
-		200);
-
-
-	iText(
-		SCREEN_WIDTH / 2 - 100,
-		40,
-		"BACKSPACE to go back",
-		GAME_FONT);
-}
-
-
-// ============================================================
-// 17. CHARACTER SELECT SCREEN
-// ============================================================
-
-void drawCharacterSelect()
-{
+void drawCharacterSelect() {
 	drawMenuBackdrop();
+	drawTitle("CHOOSE YOUR FISH");
 
+	double cardW = 300, gap = 60;
+	double totalW = cardW * 3 + gap * 2;
+	double startX = SCREEN_W / 2.0 - totalW / 2;
+	double y = SCREEN_H / 2.0 - 120;
 
-	// ========================================================
-	// TITLE
-	// ========================================================
+	for (int i = 0; i < 3; i++) {
+		double x = startX + i * (cardW + gap);
+		bool sel = (i == skinIndex);
 
-	drawPixelTitle(
-		SCREEN_WIDTH / 2 - 70,
-		520,
-		"CHOOSE YOUR FISH",
-		255,
-		255,
-		255);
+		if (sel) drawPanel(x, y, cardW, 300, 20, 60, 90, 120, 220, 255);
+		else     drawPanel(x, y, cardW, 300, 12, 26, 40, 70, 100, 130);
 
+		iShowImage((int)(x + cardW / 2 - 90), (int)(y + 110), 180, 130, skinRight[i]);
+		drawText(x + cardW / 2 - strlen(skinNames[i]) * 4.5, y + 60,
+			skinNames[i], sel ? 255 : 170, sel ? 235 : 190, sel ? 140 : 200);
 
-	// ========================================================
-	// FISH CARDS
-	// ========================================================
-
-	int cardX[3] =
-	{
-		280,
-		550,
-		820
-	};
-
-	int cardY = 280;
-
-	int cardW = 180;
-
-	int cardH = 200;
-
-
-	const char* fishNames[3] =
-	{
-		"Character 01",
-		"Character 02",
-		"Character 03"
-	};
-
-
-	for (int i = 0;
-		i < 3;
-		i++)
-	{
-		int x =
-			cardX[i];
-
-
-		bool isSelected =
-			(selectedCharacter == i);
-
-
-		// ====================================================
-		// SELECTED CARD
-		// ====================================================
-
-		if (isSelected)
-		{
-			iSetColor(
-				20,
-				60,
-				100);
-
-			iFilledRectangle(
-				x,
-				cardY,
-				cardW,
-				cardH);
-
-
-			iSetColor(
-				255,
-				215,
-				0);
-
-			iRectangle(
-				x,
-				cardY,
-				cardW,
-				cardH);
-
-			iRectangle(
-				x - 2,
-				cardY - 2,
-				cardW + 4,
-				cardH + 4);
-
-			iRectangle(
-				x - 4,
-				cardY - 4,
-				cardW + 8,
-				cardH + 8);
-
-
-			iSetColor(
-				255,
-				215,
-				0);
-
-			iText(
-				x + 50,
-				cardY + cardH + 15,
-				"SELECTED",
-				GAME_FONT);
-		}
-
-
-		// ====================================================
-		// NORMAL CARD
-		// ====================================================
-
-		else
-		{
-			iSetColor(
-				15,
-				30,
-				55);
-
-			iFilledRectangle(
-				x,
-				cardY,
-				cardW,
-				cardH);
-
-
-			iSetColor(
-				100,
-				150,
-				200);
-
-			iRectangle(
-				x,
-				cardY,
-				cardW,
-				cardH);
-		}
-
-
-		// ====================================================
-		// FISH IMAGE (Side-by-Side 3 Distinct Characters)
-		// ====================================================
-
-		iShowImage(
-			x + 30,
-			cardY + 60,
-			120,
-			110,
-			menuCharacterSprites[i]);
-
-
-		// ====================================================
-		// FISH NAME
-		// ====================================================
-
-		if (isSelected)
-		{
-			iSetColor(
-				255,
-				215,
-				0);
-		}
-		else
-		{
-			iSetColor(
-				255,
-				255,
-				255);
-		}
-
-
-		iText(
-			x + 36,
-			cardY + 20,
-			(char*)fishNames[i],
-			GAME_FONT);
+		if (sel) drawText(x + cardW / 2 - 30, y + 26, "SELECTED", 120, 240, 160);
 	}
 
+	drawHint("LEFT / RIGHT to choose    ENTER to confirm    BACKSPACE to go back");
+}
 
-	// ========================================================
-	// CONTINUE BUTTON
-	// ========================================================
-
-	int btnContX = 515;
-	int btnContY = 180;
-	int btnContW = 250;
-	int btnContH = 50;
-
-
-	if (selectedCharacter != -1)
-	{
-		iSetColor(
-			40,
-			180,
-			100);
-
-		iFilledRectangle(
-			btnContX,
-			btnContY,
-			btnContW,
-			btnContH);
-
-
-		iSetColor(
-			255,
-			255,
-			255);
-
-		iRectangle(
-			btnContX,
-			btnContY,
-			btnContW,
-			btnContH);
-
-
-		iText(
-			btnContX + 75,
-			btnContY + 18,
-			"CONTINUE",
-			GAME_FONT);
+void updateCharacterSelect() {
+	if (tapped(isSpecialKeyPressed(GLUT_KEY_LEFT) != 0, kLeft)) {
+		skinIndex = (skinIndex + 2) % 3;
+		playButton();
 	}
+	if (tapped(isSpecialKeyPressed(GLUT_KEY_RIGHT) != 0, kRight)) {
+		skinIndex = (skinIndex + 1) % 3;
+		playButton();
+	}
+	if (tapped(isKeyPressed(KEY_ENTER) != 0, kEnter)) {
+		playerSkin = skinIndex;
+		playButton();
+		screen = SCR_MAP;
+	}
+}
+
+// ==== 9. LEVEL MAP ====
+// Three stops along a route. Only unlocked levels can be entered.
+int mapIndex = 0;
+
+void drawLevelMap() {
+	drawMenuBackdrop();
+	drawTitle("SELECT A LEVEL");
+
+	const char* names[3] = { "1  -  SUNNY SHALLOWS", "2  -  MIDNIGHT DEEP", "3  -  STORM WATERS" };
+	double y0 = SCREEN_H / 2.0 + 60;
+
+	// A dotted route connecting the three stops.
+	iSetColor(90, 140, 180);
+	for (int i = 0; i < 3 - 1; i++)
+	for (int d = 0; d < 10; d++)
+		iFilledCircle(SCREEN_W / 2.0, y0 - i * 90 - d * 9 - 52, 2.5, 6);
+
+	for (int i = 0; i < 3; i++) {
+		bool locked = (i + 1) > unlockedLevel;
+		char label[64];
+		if (locked) sprintf_s(label, "%s   [LOCKED]", names[i]);
+		else         sprintf_s(label, "%s", names[i]);
+		drawButton(SCREEN_W / 2.0, y0 - i * 90, 520, label, i == mapIndex, locked);
+	}
+
+	char buf[64];
+	sprintf_s(buf, "PLAYER: %s", playerName);
+	drawText(SCREEN_W / 2.0 - 60, y0 + 110, buf, 170, 215, 245);
+	drawHint("UP / DOWN to move    ENTER to play    BACKSPACE to go back");
+}
+
+void updateLevelMap() {
+	if (tapped(isSpecialKeyPressed(GLUT_KEY_UP) != 0, kUp)) {
+		mapIndex = (mapIndex + 2) % 3;
+		playButton();
+	}
+	if (tapped(isSpecialKeyPressed(GLUT_KEY_DOWN) != 0, kDown)) {
+		mapIndex = (mapIndex + 1) % 3;
+		playButton();
+	}
+	if (tapped(isKeyPressed(KEY_ENTER) != 0, kEnter)) {
+		if (mapIndex + 1 > unlockedLevel) return;   // locked - ignore
+		playButton();
+		stats.score = 0;
+		stats.lives = 3;
+		startLevel(mapIndex + 1);
+	}
+}
+
+// ==== 10. SCORES / HELP / CREDITS ====
+void drawScores() {
+	drawMenuBackdrop();
+	drawTitle("HIGH SCORES");
+
+	double x = SCREEN_W / 2.0 - 260, y = SCREEN_H - 300;
+	drawPanel(x, y - 380, 520, 400, 10, 24, 38, 90, 140, 180);
+
+	if (scoreCount == 0) {
+		drawText(x + 150, y - 190, "no scores yet - go play!", 190, 210, 230);
+	}
+	for (int i = 0; i < scoreCount; i++) {
+		char row[80];
+		sprintf_s(row, "%2d.  %-16s %6d", i + 1, scoreTable[i].name, scoreTable[i].score);
+		int bright = (i == 0) ? 255 : 210;
+		drawText(x + 40, y - 40 - i * 34, row, bright, bright, (i == 0) ? 120 : 230);
+	}
+	drawHint("BACKSPACE to go back");
+}
+
+void drawHelp() {
+	iShowImage(0, 0, SCREEN_W, SCREEN_H, helpImage);
+	drawHint("BACKSPACE to go back");
+}
+
+void drawCredits() {
+	iShowImage(0, 0, SCREEN_W, SCREEN_H, creditsImage);
+	drawHint("BACKSPACE to go back");
+}
+
+// ==== 11. END-OF-RUN SCREENS ====
+void drawGameOver() {
+	iShowImage(0, 0, SCREEN_W, SCREEN_H, loseImage);
+	char buf[64];
+	sprintf_s(buf, "FINAL SCORE: %d", stats.score);
+	drawText(SCREEN_W / 2.0 - 80, SCREEN_H / 2.0 - 60, buf, 255, 235, 150, BIG_FONT);
+	drawHint("BACKSPACE to return to the menu");
+}
+
+void drawLevelWon() {
+	iShowImage(0, 0, SCREEN_W, SCREEN_H, winImage);
+	char buf[64];
+	sprintf_s(buf, "SCORE: %d", stats.score);
+	drawText(SCREEN_W / 2.0 - 60, SCREEN_H / 2.0 - 40, buf, 255, 235, 150, BIG_FONT);
+
+	if (currentLevel < MAX_LEVELS)
+		drawText(SCREEN_W / 2.0 - 150, SCREEN_H / 2.0 - 90, "ENTER for the next level", 180, 240, 200);
 	else
-	{
-		iSetColor(
-			60,
-			70,
-			80);
-
-		iFilledRectangle(
-			btnContX,
-			btnContY,
-			btnContW,
-			btnContH);
-
-
-		iSetColor(
-			100,
-			110,
-			120);
-
-		iRectangle(
-			btnContX,
-			btnContY,
-			btnContW,
-			btnContH);
-
-
-		iSetColor(
-			170,
-			170,
-			170);
-
-		iText(
-			btnContX + 30,
-			btnContY + 18,
-			"SELECT A FISH FIRST",
-			GAME_FONT);
-	}
-
-
-	// ========================================================
-	// BACK BUTTON
-	// ========================================================
-
-	int btnBackX = 540;
-	int btnBackY = 105;
-	int btnBackW = 200;
-	int btnBackH = 45;
-
-
-	iSetColor(
-		180,
-		50,
-		50);
-
-	iFilledRectangle(
-		btnBackX,
-		btnBackY,
-		btnBackW,
-		btnBackH);
-
-
-	iSetColor(
-		255,
-		255,
-		255);
-
-	iRectangle(
-		btnBackX,
-		btnBackY,
-		btnBackW,
-		btnBackH);
-
-
-	iText(
-		btnBackX + 80,
-		btnBackY + 15,
-		"BACK",
-		GAME_FONT);
-
-
-	// ========================================================
-	// HELP TEXT
-	// ========================================================
-
-	iSetColor(
-		200,
-		200,
-		200);
-
-
-	iText(
-		SCREEN_WIDTH / 2 - 210,
-		45,
-		"Click a fish to select   Click CONTINUE to choose level",
-		GAME_FONT);
+		drawText(SCREEN_W / 2.0 - 170, SCREEN_H / 2.0 - 90, "You finished every level!", 180, 240, 200);
+	drawHint("BACKSPACE to return to the menu");
 }
 
-
-// ============================================================
-// 18. DRAW CURRENT MENU
-// ============================================================
-
-void drawCurrentMenu()
-{
-	if (currentMenuScreen == MENU_HOME)
-	{
-		drawHomeMenu();
-	}
-
-	else if (currentMenuScreen == MENU_LEVEL_SELECT)
-	{
-		drawLevelSelectMenu();
-	}
-
-	else if (currentMenuScreen == MENU_INSTRUCTIONS)
-	{
-		drawInstructionsMenu();
-	}
-
-	else if (currentMenuScreen == MENU_CREDITS)
-	{
-		drawCreditsMenu();
-	}
-
-	else if (currentMenuScreen == MENU_CHARACTER_SELECT)
-	{
-		drawCharacterSelect();
-	}
+// ==== 12. RETURNING TO THE MENU ====
+void returnToMenu() {
+	screen = SCR_MENU;
+	isGameOver = false;
+	isLevelWon = false;
+	menuIndex = 0;
+	currentLevel = 1;   // menu always shows the bright level-1 ocean
+	scrollX = 0;        // stop the menu scenery being offset by the last level
+	stopGameMusic();
+	startMenuMusic();
 }
-
 
 #endif

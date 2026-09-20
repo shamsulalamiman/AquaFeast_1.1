@@ -1,181 +1,151 @@
-#ifndef LEVELS_H
-#define LEVELS_H
-
-// ==== 1. INCLUDES ====
+#ifndef LEVELS_HPP
+#define LEVELS_HPP
+// =====================================================================
+// levels.hpp - what makes each level different, and the per-tick
+// update / draw for gameplay.
+//
+// Every level runs the SAME code. A level is just a set of numbers.
+// Difficulty rises sharply: bigger goal, less time, faster and more
+// dangerous fish, and an extra hazard each time.
+// =====================================================================
 #include "utility.hpp"
 #include "player.hpp"
 #include "entities.hpp"
-#include "boats.hpp"
+#include "boat.hpp"
 #include "environment.hpp"
-#include "menu.hpp" // for playWinSound()
+#include "hud.hpp"
+#include "sound.hpp"
+#include "scores.hpp"
 
-// ==== 2. STRUCT ====
-struct LevelConfig {
-	double worldWidth;
-	double targetSize;
-	int    timeLimitSeconds;
-	bool   netsEnabled;
-	bool   hooksEnabled;
+struct LevelInfo {
+    double width;        // how wide the world is
+    double goalSize;     // grow this big to win
+    int    seconds;      // time limit
+    int    preyCount;    // how much food there is
+    double preySpeed;
+    int    predCount;    // how many predators
+    double predSpeed;
+    double predSize;
 };
 
-// ==== 3. GLOBAL ARRAY ====
-LevelConfig levelConfigs[MAX_LEVELS + 1];
+LevelInfo levels[MAX_LEVELS + 1];   // index 0 unused, levels 1..3
 
-// ==== 4. LEVEL 2 OCEAN CURRENTS (DYNAMIC & ENHANCED DIFFICULTY) ====
-struct CurrentZone {
-	double minX, maxX;
-	double minY, maxY;
-	double pushX, pushY;
-};
-
-#define MAX_CURRENTS 3
-CurrentZone level2Currents[MAX_CURRENTS];
-int level2CurrentCount = 0;
-int currentFlipTimer = 0; // Timer to reverse current flows periodically
-
-void setupLevel2Currents() {
-	level2CurrentCount = 0;
-	currentFlipTimer = 0;
-
-	// Zone 1: Mid-water current pushing EAST (Right)
-	level2Currents[0] = { 400.0, 1200.0, 150.0, 300.0, 1.4, 0.0 };
-
-	// Zone 2: Deep ocean current pushing WEST (Left)
-	level2Currents[1] = { 1400.0, 2200.0, 40.0, 180.0, -1.8, 0.0 };
-
-	level2CurrentCount = 2;
+void setupLevels() {
+    //                width  goal  secs prey pSpd preds pdSpd pdSize
+    levels[1] = {  2600.0,  46.0, 120,  30, 1.5,    3,  2.1,  30.0 };
+    levels[2] = {  3400.0,  62.0, 100,  26, 2.1,    5,  2.9,  34.0 };
+    levels[3] = {  4200.0,  80.0,  85,  22, 2.7,    7,  3.6,  38.0 };
 }
 
-void applyOceanCurrents() {
-	if (currentLevel != 2) return;
+void loadLevels() { setupLevels(); }
 
-	// High Difficulty: Reverse current directions every ~4 seconds (240 ticks)
-	currentFlipTimer++;
-	if (currentFlipTimer >= 240) {
-		for (int i = 0; i < level2CurrentCount; i++) {
-			level2Currents[i].pushX *= -1.0;
-		}
-		currentFlipTimer = 0;
-	}
+// ==== SPAWNING ====
+// Prey get scarcer and faster each level while the goal grows, so later
+// levels genuinely demand better play rather than just more waiting.
+void spawnForLevel(int n) {
+    LevelInfo &L = levels[n];
+    preyCount = 0;
+    predCount = 0;
 
-	// 1. Push Player
-	for (int i = 0; i < level2CurrentCount; i++) {
-		CurrentZone &z = level2Currents[i];
-		if (player.x >= z.minX && player.x <= z.maxX &&
-			player.y >= z.minY && player.y <= z.maxY) {
-			player.x += z.pushX;
-			player.y += z.pushY;
-		}
-	}
+    for (int i = 0; i < L.preyCount; i++) {
+        double x = randRange(120, L.width - 120);
+        double y = randRange(FLOOR_Y + 60, SEA_Y - 60);
+        // A few larger prey appear from level 2 on - worth more points,
+        // but you must grow before you can eat them.
+        double size = (n >= 2 && i % 4 == 0) ? randRange(22, 30) : randRange(11, 16);
+        addPrey(x, y, size, L.preySpeed);
+    }
 
-	// 2. Push Prey Fish
-	for (int p = 0; p < preyCount; p++) {
-		if (!preyList[p].alive) continue;
-		for (int i = 0; i < level2CurrentCount; i++) {
-			CurrentZone &z = level2Currents[i];
-			if (preyList[p].x >= z.minX && preyList[p].x <= z.maxX &&
-				preyList[p].y >= z.minY && preyList[p].y <= z.maxY) {
-				preyList[p].x += z.pushX;
-				preyList[p].y += z.pushY;
-			}
-		}
-	}
-
-	// 3. High Difficulty: Push Predators with 1.8x speed boost in currents
-	for (int pr = 0; pr < predatorCount; pr++) {
-		if (!predators[pr].alive) continue;
-		for (int i = 0; i < level2CurrentCount; i++) {
-			CurrentZone &z = level2Currents[i];
-			if (predators[pr].x >= z.minX && predators[pr].x <= z.maxX &&
-				predators[pr].y >= z.minY && predators[pr].y <= z.maxY) {
-				predators[pr].x += z.pushX * 1.8;
-				predators[pr].y += z.pushY * 1.8;
-			}
-		}
-	}
+    for (int i = 0; i < L.predCount; i++) {
+        double x = randRange(200, L.width - 200);
+        double y = randRange(FLOOR_Y + 80, SEA_Y - 80);
+        addPredator(x, y, L.predSize, L.predSpeed, (n >= 2) ? 1 : 0);
+    }
 }
 
-// Visual indicators removed as requested
-void drawCurrentIndicators() {
-	return;
+// Saves the run's score exactly once, no matter how the run ended
+// (won, ran out of time, or lost every life).
+void saveRunScore() {
+    if (scoreSaved) return;
+    scoreSaved = true;
+    submitScore(playerName, stats.score);
 }
 
-// ==== 5. CONFIGS & FUNCTIONS ====
-void setupLevelConfigs() {
-	levelConfigs[1] = { 2000.0, 50, 120, false, false };
-	// High Difficulty Level 2: Target size 70, 75s timer, fishing nets enabled
-	levelConfigs[2] = { 2600.0, 50, 75, true, false };
-	levelConfigs[3] = { 3200.0, 80, 80, true, true };
+void startLevel(int n) {
+    currentLevel = n;
+    scoreSaved = false;
+    LevelInfo &L = levels[n];
+
+    resetPlayer(L.width / 2.0, SEA_Y / 2.0);
+    spawnForLevel(n);
+    resetBoat(n);
+    resetEnvironment(L.width);
+
+    stats.level = n;
+    stats.timeLeft = L.seconds;
+    stats.progress = 0.0;
+    isGameOver = false;
+    isLevelWon = false;
+
+    screen = SCR_PLAY;
+    stopMenuMusic();
+    startGameMusic();
 }
 
-void loadLevels() {
-	setupLevelConfigs();
+// ==== PER-TICK UPDATE ====
+void updateLevel() {
+    LevelInfo &L = levels[currentLevel];
+
+    // While hooked the fish cannot swim - the tug-of-war takes over.
+    if (!playerIsHooked()) {
+        updateEntities(L.width);
+        updateJump();
+    }
+
+    updateRespawn();
+    updateBoat(L.width);
+    updateEnvironment();
+    updateSwimBubbles();
+    tickPlayerTimers();
+    clampPlayer(L.width);
+    followPlayer();
+
+    stats.progress = player.size / L.goalSize;
+    if (stats.progress > 1.0) stats.progress = 1.0;
+
+    if (!isLevelWon && player.size >= L.goalSize) {
+        isLevelWon = true;
+        stats.score += stats.timeLeft * 6;          // time bonus
+        if (currentLevel >= unlockedLevel && currentLevel < MAX_LEVELS)
+            unlockedLevel = currentLevel + 1;        // unlock the next level
+        saveRunScore();
+        stopGameMusic();
+        playWin();
+    }
 }
 
-void levelInitialize(int levelNumber) {
-	currentLevel = levelNumber;
-	LevelConfig cfg = levelConfigs[levelNumber];
-	resetPlayer(cfg.worldWidth / 2.0, WATER_SURFACE_Y - 150.0);
-	spawnEntitiesForLevel(levelNumber, cfg.worldWidth);
-	resetPowerups();
-	resetBoats();
-	resetEnvironment(cfg.worldWidth);
-
-	if (levelNumber == 2) {
-		setupLevel2Currents();
-	}
-
-	stats.level = levelNumber;
-	stats.timeRemaining = cfg.timeLimitSeconds;
-	stats.progress = 0.0f;
-	isGameOver = false;
-	isLevelComplete = false;
-}
-
-void levelUpdate() {
-	LevelConfig cfg = levelConfigs[currentLevel];
-
-	updateEntities();
-	applyOceanCurrents();
-	updatePowerups();
-	updateBoats(cfg.worldWidth, cfg.netsEnabled, cfg.hooksEnabled);
-	updateEnvironmentAnimation();
-	updateBubbles();
-	followPlayer();
-	updatePlayerJump();
-	clampPlayerToWater();
-
-	stats.progress = (float)(player.size / cfg.targetSize);
-	if (stats.progress > 1.0f) stats.progress = 1.0f;
-
-	if (!isLevelComplete && player.size >= cfg.targetSize) {
-		isLevelComplete = true;
-		stats.score += stats.timeRemaining * 5;
-		playWinSound();
-		stopGameplayMusic();
-	}
-}
-
+// Called once per second by a timer in iMain.cpp.
 void tickLevelClock() {
-	stats.timeRemaining--;
-	if (stats.timeRemaining <= 0) {
-		stats.timeRemaining = 0;
-		triggerGameOver();
-	}
-	tickChestClock();
-	tickSpeedUpClock();
-	tickNetSlowClock();
+    stats.timeLeft--;
+    if (stats.timeLeft <= 0) {
+        stats.timeLeft = 0;
+        saveRunScore();
+        triggerGameOver();
+    }
+    tickBoatClocks();
 }
 
-void levelDraw() {
-	drawEnvironment();
-	drawCurrentIndicators();
-	drawBubbles();
-	drawBoats();
-	drawEntities();
-	drawPowerups();
-	drawPlayer();
-	drawHud();
+// ==== DRAW ====
+void drawLevel() {
+    drawEnvironment();
+    drawSwimBubbles();
+    drawBoat();
+    drawNetsAndHook();
+    drawEntities();
+    drawPowerups();
+    drawPlayer();
+    drawHookBar();
+    drawHud();
 }
 
 #endif

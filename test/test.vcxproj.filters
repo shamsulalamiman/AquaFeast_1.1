@@ -20,13 +20,13 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="boats.hpp">
+    <ClInclude Include="utility.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Boat.hpp">
+    <ClInclude Include="sound.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="environment.hpp">
+    <ClInclude Include="scores.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="player.hpp">
@@ -35,13 +35,19 @@
     <ClInclude Include="entities.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="boat.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="environment.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="hud.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="levels.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="menu.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="utility.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
