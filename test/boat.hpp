@@ -13,9 +13,9 @@
 #include "sound.hpp"
 
 // ==== 1. SIZES & TUNING ====
-const double BOAT_W = 190.0, BOAT_H = 100.0;
-const double NET_W  = 120.0, NET_H  = 120.0;
-const double HOOK_W = 58.0,  HOOK_H = 88.0;
+const double BOAT_W = 150.0, BOAT_H = 150.0;
+const double NET_W  = 100.0, NET_H  = 100.0;
+const double HOOK_W = 40.0,  HOOK_H = 40.0;
 const double SINK_SPEED = 2.6;
 
 // Hook tug-of-war. The fisherman pulls steadily; each SPACE tap pushes
@@ -354,7 +354,7 @@ void tickBoatClocks() {
 
 // ==== 10. DRAWING ====
 void drawBoat() {
-    iShowImage((int)(toScreenX(boat.x) - BOAT_W / 2), (int)(SEA_Y - 8),
+    iShowImage((int)(toScreenX(boat.x) - BOAT_W / 2), (int)(SEA_Y - 15),
                (int)BOAT_W, (int)BOAT_H, boatSprite);
 }
 

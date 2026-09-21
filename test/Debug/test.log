@@ -1,8 +1,9 @@
-﻿Build started 21-Sep-26 4:34:26 PM.
+﻿Build started 22-Sep-26 2:02:22 AM.
      1>Project "C:\Users\S A AIMAN\Downloads\AquaFeast_menufix\test\test.vcxproj" on node 2 (Build target(s)).
      1>ClCompile:
          C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\CL.exe /c /ZI /nologo /W3 /WX- /sdl /Od /Oy- /D _MBCS /Gm /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Fo"Debug\\" /Fd"Debug\vc120.pdb" /Gd /TP /analyze- /errorReport:prompt iMain.cpp
          iMain.cpp
+     1>c:\users\s a aiman\downloads\aquafeast_menufix\test\menu.hpp(250): warning C4101: 'buf' : unreferenced local variable
        Link:
          C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\link.exe /ERRORREPORT:PROMPT /OUT:"C:\Users\S A AIMAN\Downloads\AquaFeast_menufix\Debug\test.exe" /INCREMENTAL /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:\Users\S A AIMAN\Downloads\AquaFeast_menufix\Debug\test.pdb" /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\Users\S A AIMAN\Downloads\AquaFeast_menufix\Debug\test.lib" /MACHINE:X86 Debug\iMain.obj
          test.vcxproj -> C:\Users\S A AIMAN\Downloads\AquaFeast_menufix\Debug\test.exe
@@ -10,4 +11,4 @@
 
 Build succeeded.
 
-Time Elapsed 00:00:05.96
+Time Elapsed 00:00:02.29

@@ -65,7 +65,7 @@ void drawProgressBar(double x) {
     iLine(x + w / 2, y, x + w / 2, y + h);
 
     // The fish marker rides the end of the filled part.
-    iShowImage((int)(x + fill - 16), (int)(y + h - 6), 34, 26, icoProgressFish);
+    iShowImage((int)(x + fill - 16), (int)(y + h - 6), 30, 30, icoProgressFish);
 
     char pctText[16];
     sprintf_s(pctText, "%d%%", (int)(pct * 100));
@@ -99,9 +99,6 @@ void drawHud() {
     iShowImage((int)MUTE_X, (int)BTN_Y, (int)BTN_SIZE, (int)BTN_SIZE,
                isMuted ? icoMuteOff : icoMuteOn);
     iShowImage((int)RESTART_X, (int)BTN_Y, (int)BTN_SIZE, (int)BTN_SIZE, icoRestart);
-
-    if (playerName[0] != '\0')
-        drawText(SCREEN_W - 330, SCREEN_H - HUD_H + 30, playerName, 150, 200, 235);
 }
 
 // Which HUD button is under this mouse point (mouse y is measured from

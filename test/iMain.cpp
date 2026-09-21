@@ -193,8 +193,6 @@ void iMouse(int button, int state, int mx, int my) {
     // themselves, then the fish (in that order, so a fish sitting over
     // a button never steals the click).
     if (screen == SCR_MENU) {
-        if (clickedMenuMute(mx, my)) { toggleMute(); return; }
-
         int hit = menuButtonAt(mx, SCREEN_H - my);   // mouse y is from the top
         if (hit >= 0) {
             menuIndex = hit;
@@ -203,7 +201,6 @@ void iMouse(int button, int state, int mx, int my) {
             return;
         }
     }
-    clickMenuFish(mx, my);
 }
 
 void iMouseMove(int mx, int my) {}

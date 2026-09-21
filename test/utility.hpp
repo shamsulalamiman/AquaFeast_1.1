@@ -211,7 +211,7 @@ inline void drawPopupFrame(const char* title) {
 
 // A small hint line pinned just under a popup.
 inline void drawPopupHint(const char* text) {
-    drawTextCentred(SCREEN_W / 2.0, POPUP_Y - 30, text, 190, 212, 232);
+    drawTextCentred(SCREEN_W / 2.0, POPUP_Y - 70, text, 190, 212, 232);
 }
 
 #endif

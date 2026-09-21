@@ -13,7 +13,7 @@
 #include "player.hpp"
 
 #define MAX_CLOUDS    5
-#define MAX_BIRDS     4
+#define MAX_BIRDS     3
 #define BIRD_FRAMES   3
 #define MAX_WEEDS    20    // enough to cover the whole sea floor
 #define MAX_RAIN    160
@@ -114,14 +114,14 @@ void drawSand() {
 void drawSeaweed() {
 	for (int i = 0; i < MAX_WEEDS; i++) {
 		double sx = toScreenX(weeds[i].x);
-		if (sx < -80 || sx > SCREEN_W + 80) continue;
-		iShowImage((int)sx - 34, (int)SAND_H - 12, 68, 92, weedSprite[weeds[i].look]);
+		//if (sx < -80 || sx > SCREEN_W + 80) continue;
+		iShowImage((int)sx - 50, (int)SAND_H - 12, 50, 50, weedSprite[weeds[i].look]);
 	}
 }
 
 // ==== 4. SKY ====
 void drawSun() {
-    iShowImage((int)(SCREEN_W - 330), (int)(SEA_Y + 165), 170, 170, sunSprite);
+    iShowImage((int)(SCREEN_W - 330), (int)(SEA_Y + 150), 170, 170, sunSprite);
 }
 
 void drawMoonAndStars() {
@@ -131,7 +131,7 @@ void drawMoonAndStars() {
         double sy = SEA_Y + 40 + fmod(i * 83.0, SCREEN_H - SEA_Y - 60);
         iFilledCircle(sx, sy, (i % 4 == 0) ? 2.4 : 1.4, 6);
     }
-    iShowImage((int)(SCREEN_W - 340), (int)(SEA_Y + 160), 150, 150, moonSprite);
+	iShowImage((int)(SCREEN_W - 340), (int)(SEA_Y + 150), 150, 150, moonSprite);
 }
 
 void drawRain() {
@@ -154,14 +154,14 @@ void drawSky() {
     else if (currentLevel == 3) iSetColor(160, 164, 172);
     else                         iSetColor(255, 255, 255);
     for (int i = 0; i < MAX_CLOUDS; i++)
-        iShowImage((int)clouds[i].x, (int)clouds[i].y, 150, 92, cloudSprite);
+        iShowImage((int)clouds[i].x, (int)clouds[i].y, 100, 100, cloudSprite);
     iSetColor(255, 255, 255);
 
     // Birds flap by cycling through their 3 frames.
     int frame = (birdAnimTick / 6) % BIRD_FRAMES;
     if (currentLevel == 2) iSetColor(150, 160, 190);
     for (int i = 0; i < MAX_BIRDS; i++)
-        iShowImage((int)birds[i].x, (int)birds[i].y, 66, 48, birdFrame[frame]);
+        iShowImage((int)birds[i].x, 850, 50, 50, birdFrame[frame]);
     iSetColor(255, 255, 255);
 
     if (currentLevel == 3) drawRain();

@@ -25,9 +25,11 @@
 const char* menuLabels[MENU_COUNT] = { "START", "INSTRUCTION", "SCORE", "CREDIT", "EXIT" };
 int menuIndex = 0;
 
-int splashImage, helpImage, creditsImage;
+int splashImage, helpImage, creditsImage, scoreImage, gameLogo;
 int btnNormal, btnBright;        // the two button image states
 int menuFishIcon;                // the little marker beside the selected row
+
+int logo_h = 220, logo_w = 630;
 
 int splashTicks = 0;
 const int SPLASH_LENGTH = 150;   // ~4.5 seconds at a 30ms tick
@@ -113,30 +115,6 @@ void drawMenuFish() {
         iShowImage((int)(f.x - s / 2), (int)(f.y - s / 2), (int)s, (int)s, menuFishSprite(f));
     }
 }
-
-// Clicking a fish sends it darting off in a new direction. The test
-// uses the fish's real drawn size, so big and small fish are both easy
-// to hit - the old version missed most clicks on large fish.
-void clickMenuFish(double mouseX, double mouseY) {
-    double y = SCREEN_H - mouseY;        // mouse y comes from the top
-
-    int best = -1;
-    double bestDist = 1e9;
-    for (int i = 0; i < MENU_FISH; i++) {
-        double d = dist(mouseX, y, menuFish[i].x, menuFish[i].y);
-        if (d < menuFish[i].size + 14 && d < bestDist) { bestDist = d; best = i; }
-    }
-    if (best < 0) return;
-
-    MenuFish &f = menuFish[best];
-    double angle = randRange(0, 6.283);
-    f.dx = cos(angle) * 1.8;
-    if (fabs(f.dx) < 0.4) f.dx = (f.dx < 0 ? -0.8 : 0.8);
-    f.dy = sin(angle) * 0.8;
-    f.dartTicks = 50;
-    playButton();
-}
-
 // The menu's living ocean: the same scenery as level 1, plus the fish.
 void drawMenuBackdrop() {
     int saved = currentLevel;
@@ -148,9 +126,11 @@ void drawMenuBackdrop() {
 
 // ==== 3. LOADING ====
 void loadMenuImages() {
+	gameLogo = loadImg("Images/logo.png");
     splashImage  = loadImg("Images/splash.png", "Images/backgroundImage.png");
     helpImage    = loadImg("Images/instruction.png");
     creditsImage = loadImg("Images/credit.png");
+	scoreImage = loadImg("Images/score.png");
 
     // The two button states. If the art is missing, drawButton() falls
     // back to drawing plain coloured panels instead.
@@ -230,7 +210,7 @@ int menuButtonAt(double px, double py) {
 // A loading page with a progress bar and a fish that swims along it.
 void drawSplash() {
     iShowImage(0, 0, SCREEN_W, SCREEN_H, splashImage);
-
+	loadingSound();
     double barW = 640, barH = 26;
     double x = SCREEN_W / 2.0 - barW / 2, y = 180;
     double pct = clampD((double)splashTicks / SPLASH_LENGTH, 0, 1);
@@ -262,22 +242,16 @@ void updateSplash() {
 // ==== 6. MAIN MENU ====
 void drawMenu() {
     drawMenuBackdrop();
-
-    drawTextCentred(SCREEN_W / 2.0, SCREEN_H - 150, "A Q U A F E A S T", 255, 240, 170, BIG_FONT);
+	iShowImage(SCREEN_W / 2.0 - (logo_w/2), SCREEN_H - 230, 630,220, gameLogo);
 
     for (int i = 0; i < MENU_COUNT; i++)
         drawMenuButton(SCREEN_W / 2.0, menuButtonY(i), MENU_BTN_W, MENU_BTN_H, menuLabels[i], i == menuIndex);
 
-    char buf[64];
-    sprintf_s(buf, "BEST SCORE: %d", bestScore());
-    drawTextCentred(SCREEN_W / 2.0, 150, buf, 255, 225, 120);
+	char buf[64];
 
     // Mute button, bottom right, matching the HUD one.
-    iShowImage(SCREEN_W - 80, 60, 44, 44, isMuted ? icoMuteOff : icoMuteOn);
+    iShowImage(SCREEN_W - 80, 25, 44, 44, isMuted ? icoMuteOff : icoMuteOn);
     drawText(SCREEN_W - 150, 74, "M", 200, 220, 235);
-
-    drawTextCentred(SCREEN_W / 2.0, 90,
-        "UP/DOWN or W/S to move    ENTER to select    M to mute    click a fish", 195, 215, 235);
 }
 
 void openMenuChoice() {
@@ -298,11 +272,6 @@ void updateMenu() {
     if (tapped(isKeyPressed(KEY_ENTER) != 0, kEnter)) { playButton(); openMenuChoice(); }
 }
 
-// Clicking the menu's mute button.
-bool clickedMenuMute(double mouseX, double mouseY) {
-    double y = SCREEN_H - mouseY;
-    return inBox(mouseX, y, SCREEN_W - 80, 60, 44, 44);
-}
 
 // ==== 7. NICKNAME POPUP ====
 void drawNamePopup() {
@@ -435,8 +404,8 @@ void updateLevelMapPopup() {
 // ==== 10. SCORE POPUP ====
 void drawScorePopup() {
     drawMenuBackdrop();
-    drawPopupFrame("HIGH SCORES");
-
+	iShowImage(POPUP_X, POPUP_Y, POPUP_W, POPUP_H, scoreImage);
+ 
     if (scoreCount == 0)
         drawTextCentred(SCREEN_W / 2.0, POPUP_Y + 220, "no scores yet - go play!", 190, 210, 230);
 
@@ -445,12 +414,12 @@ void drawScorePopup() {
     for (int i = 0; i < show; i++) {
         char row[80];
         sprintf_s(row, "%d.  %-14s %6d", i + 1, scoreTable[i].name, scoreTable[i].score);
-        int bright = (i == 0) ? 255 : 210;
-        drawText(POPUP_X + 60, POPUP_Y + 300 - i * 32, row, bright, bright, (i == 0) ? 120 : 230);
+        int bright = (i == 0) ? 220 : 255;
+		iText(POPUP_X + 60, POPUP_Y + 250 - i * 32, row, GAME_FONT);
     }
 
-    drawPopupButton(SCREEN_W / 2.0 - 110, POPUP_Y + 40, 190, "BACK", false);
-    drawPopupButton(SCREEN_W / 2.0 + 110, POPUP_Y + 40, 190, "DELETE ALL", false);
+	drawPopupButton(SCREEN_W / 2.0, POPUP_Y - 50, 200, "BACK", false);
+    //drawPopupButton(SCREEN_W / 2.0 + 110, POPUP_Y -50, 190, "DELETE ALL", false);
     drawPopupHint("press D to delete all saved scores    BACKSPACE to go back");
 }
 
@@ -464,42 +433,15 @@ void updateScorePopup() {
 // ==== 11. INSTRUCTION / CREDIT POPUPS ====
 void drawHelpPopup() {
     drawMenuBackdrop();
-    drawPopupFrame("INSTRUCTIONS");
-
-    const char* lines[] = {
-        "ARROWS or WASD  -  swim",
-        "SPACE  -  jump above the water",
-        "Eat fish SMALLER than you to grow",
-        "Avoid anything BIGGER than you",
-        "A warning icon marks real threats",
-        "Halfway through, a danger fish arrives",
-        "LEVEL 3: mash SPACE to escape the hook",
-        "M  -  mute      R  -  restart"
-    };
-    for (int i = 0; i < 8; i++)
-        drawText(POPUP_X + 40, POPUP_Y + 300 - i * 30, lines[i], 220, 232, 244);
-
-    drawPopupButton(SCREEN_W / 2.0, POPUP_Y + 40, 200, "BACK", false);
+	iShowImage(POPUP_X, POPUP_Y, POPUP_W, POPUP_H, helpImage);
+    drawPopupButton(SCREEN_W / 2.0, POPUP_Y - 50, 200, "BACK", false);
     drawPopupHint("BACKSPACE to go back");
 }
 
 void drawCreditPopup() {
     drawMenuBackdrop();
-    drawPopupFrame("CREDITS");
-
-    const char* lines[] = {
-        "AQUAFEAST",
-        "",
-        "A 2D arcade game built with iGraphics",
-        "",
-        "Course project",
-        "AUST CSE"
-    };
-    for (int i = 0; i < 6; i++)
-        drawTextCentred(SCREEN_W / 2.0, POPUP_Y + 290 - i * 34, lines[i],
-                        i == 0 ? 255 : 215, i == 0 ? 235 : 228, i == 0 ? 140 : 240);
-
-    drawPopupButton(SCREEN_W / 2.0, POPUP_Y + 40, 200, "BACK", false);
+	iShowImage(POPUP_X, POPUP_Y, POPUP_W, POPUP_H, creditsImage);
+	drawPopupButton(SCREEN_W / 2.0, POPUP_Y - 50, 200, "BACK", false);
     drawPopupHint("BACKSPACE to go back");
 }
 
@@ -530,7 +472,7 @@ void drawEndPopup() {
         drawTextCentred(SCREEN_W / 2.0, POPUP_Y + 210, "You finished every level!", 140, 235, 175);
     }
 
-    drawPopupButton(SCREEN_W / 2.0, POPUP_Y + 110, 250, "RESTART",   endIndex == 0);
+    drawPopupButton(SCREEN_W / 2.0, POPUP_Y + 110, 250, "NEXT/ RESTART",   endIndex == 0);
     drawPopupButton(SCREEN_W / 2.0, POPUP_Y + 50,  250, "MAIN MENU", endIndex == 1);
     drawPopupHint("UP/DOWN to choose    ENTER to confirm");
 }

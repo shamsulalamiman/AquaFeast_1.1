@@ -33,6 +33,7 @@ void loadSounds() {
     openSound("Sound/alert.mp3",     "sndAlert");
     openSound("Sound/bgMusic.mp3",   "musGame");
     openSound("Sound/gamestart.mp3", "musMenu");
+	openSound("Sound/loading.mp3", "loading");
 }
 
 inline void playSound(const char* alias) {
@@ -54,6 +55,7 @@ void playCollect() { playSound("sndCollect"); }
 void playWin()     { playSound("sndWin"); }
 void playLose()    { playSound("sndLose"); }
 void playAlert()   { playSound("sndAlert"); }
+void loadingSound()   { playSound("loading"); }
 
 // Short sounds that would machine-gun if played every frame get a
 // cooldown, so they space out into one natural-sounding effect.

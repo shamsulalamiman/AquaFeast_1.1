@@ -15,7 +15,7 @@
 const double JUMP_UP     = 9.0;    // upward kick when Space is pressed
 const double GRAVITY     = -0.5;   // pulls the jump back down each tick
 const double MAX_FALL    = -12.0;  // stops the fall speeding up forever
-const double START_SIZE  = 28.0;
+const double START_SIZE = 28.0;
 const double BASE_SPEED  = 5.2;
 
 // ==== 2. STRUCT ====
