@@ -16,7 +16,7 @@
 // slow (it reads the disk), so doing it on every play would stutter the
 // game. After this, playing is just "rewind and go".
 inline void openSound(const char* file, const char* alias) {
-    if (!imageExists(file)) return;   // same file check works for any file
+    if (!imageExists(file)) return;   // the same file check works for any file
     char cmd[200];
     sprintf_s(cmd, "open \"%s\" type mpegvideo alias %s", file, alias);
     mciSendString(cmd, NULL, 0, NULL);
@@ -29,6 +29,8 @@ void loadSounds() {
     openSound("Sound/win.mp3",       "sndWin");
     openSound("Sound/lose.mp3",      "sndLose");
     openSound("Sound/swim.mp3",      "sndSwim");
+    openSound("Sound/struggle.mp3",  "sndStruggle");
+    openSound("Sound/alert.mp3",     "sndAlert");
     openSound("Sound/bgMusic.mp3",   "musGame");
     openSound("Sound/gamestart.mp3", "musMenu");
 }
@@ -40,22 +42,48 @@ inline void playSound(const char* alias) {
     mciSendString(cmd, NULL, 0, NULL);
 }
 
+inline void stopSound(const char* alias) {
+    char cmd[64];
+    sprintf_s(cmd, "stop %s", alias);
+    mciSendString(cmd, NULL, 0, NULL);
+}
+
 void playButton()  { playSound("sndBtn"); }
 void playEat()     { playSound("sndEat"); }
 void playCollect() { playSound("sndCollect"); }
 void playWin()     { playSound("sndWin"); }
 void playLose()    { playSound("sndLose"); }
+void playAlert()   { playSound("sndAlert"); }
 
-// The swimming sound is short and soft, and would machine-gun if we
-// played it every frame the arrow key is held. swimCooldown spaces it
-// out so it sounds like one continuous gentle swish.
+// Short sounds that would machine-gun if played every frame get a
+// cooldown, so they space out into one natural-sounding effect.
 int swimCooldown = 0;
+int struggleCooldown = 0;
+
 void playSwim() {
     if (swimCooldown > 0) return;
     playSound("sndSwim");
-    swimCooldown = 14;   // ~0.45s between swishes at a 30ms tick
+    swimCooldown = 14;      // ~0.45s between swishes at a 30ms tick
 }
-void tickSwimCooldown() { if (swimCooldown > 0) swimCooldown--; }
+
+// Played while the fish shakes on the hook.
+void playStruggle() {
+    if (struggleCooldown > 0) return;
+    playSound("sndStruggle");
+    struggleCooldown = 10;
+}
+
+// Explicitly cuts the struggle sound off - called the instant the fish
+// escapes or gets reeled in, so no tail end of it can keep playing.
+void stopStruggle() {
+    stopSound("sndStruggle");
+    struggleCooldown = 0;
+}
+
+void tickSoundCooldowns() {
+    if (swimCooldown > 0) swimCooldown--;
+    if (struggleCooldown > 0) struggleCooldown--;
+}
 
 void startGameMusic() { if (!isMuted) mciSendString("play musGame from 0 repeat", NULL, 0, NULL); }
 void stopGameMusic()  { mciSendString("stop musGame", NULL, 0, NULL); }

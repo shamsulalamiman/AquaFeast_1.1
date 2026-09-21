@@ -96,4 +96,11 @@ int bestScore() {
     return scoreCount > 0 ? scoreTable[0].score : 0;
 }
 
+// Wipes every saved score. Used by the "DELETE ALL" button on the
+// Scores popup. Writing the empty table also empties scores.txt.
+void clearScores() {
+    scoreCount = 0;
+    saveScores();
+}
+
 #endif

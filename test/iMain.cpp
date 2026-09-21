@@ -3,7 +3,7 @@
 //
 // This file does 3 jobs and nothing else:
 //   1. load everything once, at startup
-//   2. iDraw()      - decide WHICH screen to draw
+//   2. iDraw()       - decide WHICH screen to draw
 //   3. fixedUpdate() - decide WHICH screen to update
 // All the real work lives in the .hpp files.
 // =====================================================================
@@ -22,6 +22,8 @@
 #include "hud.hpp"
 #include "levels.hpp"
 #include "menu.hpp"
+
+bool kMute = false, kRestart = false;
 
 // ==== 1. LOAD EVERYTHING ONCE ====
 // Never call iLoadImage() while drawing - loading from disk every frame
@@ -43,40 +45,49 @@ void iDraw() {
     iClear();
 
     switch (screen) {
-        case SCR_SPLASH:    drawSplash();          break;
-        case SCR_MENU:      drawMenu();            break;
-        case SCR_NAME:      drawNameEntry();       break;
-        case SCR_CHARACTER: drawCharacterSelect(); break;
-        case SCR_MAP:       drawLevelMap();        break;
-        case SCR_SCORES:    drawScores();          break;
-        case SCR_HELP:      drawHelp();            break;
-        case SCR_CREDITS:   drawCredits();         break;
+        case SCR_SPLASH:    drawSplash();           break;
+        case SCR_MENU:      drawMenu();             break;
+        case SCR_NAME:      drawNamePopup();        break;
+        case SCR_CHARACTER: drawCharacterPopup();   break;
+        case SCR_MAP:       drawLevelMapPopup();    break;
+        case SCR_SCORES:    drawScorePopup();       break;
+        case SCR_HELP:      drawHelpPopup();        break;
+        case SCR_CREDITS:   drawCreditPopup();      break;
 
         case SCR_PLAY:
             drawLevel();
-            if (isGameOver)      drawGameOver();
-            else if (isLevelWon) drawLevelWon();
+            if (endPopup != END_NONE) drawEndPopup();
             break;
     }
 }
 
 // ==== 3. GAMEPLAY INPUT ====
 void handleGameKeys() {
-    // While hooked, the arrow keys do nothing - only SPACE matters.
+    // While hooked, swimming is disabled - only SPACE matters.
     if (playerIsHooked()) {
         if (tapped(isKeyPressed(KEY_SPACE) != 0, kSpace)) hookSpaceTap();
         return;
     }
     kSpace = isKeyPressed(KEY_SPACE) != 0;   // keep the tap detector in sync
 
-    if (isSpecialKeyPressed(GLUT_KEY_LEFT))  movePlayer(-1, 0);
-    if (isSpecialKeyPressed(GLUT_KEY_RIGHT)) movePlayer(1, 0);
-    if (isSpecialKeyPressed(GLUT_KEY_UP))    movePlayer(0, 1);
-    if (isSpecialKeyPressed(GLUT_KEY_DOWN))  movePlayer(0, -1);
-    if (isKeyPressed(KEY_SPACE))             startJump();
+    if (keyLeft())  movePlayer(-1, 0);
+    if (keyRight()) movePlayer(1, 0);
+    if (keyUp())    movePlayer(0, 1);
+    if (keyDown())  movePlayer(0, -1);
+    if (isKeyPressed(KEY_SPACE)) startJump();
 }
 
-// What BACKSPACE does depends on which screen you are on.
+// Mute (M) and Restart (R) work during play, from the keyboard or from
+// the HUD buttons (see iMouse below).
+void handleGlobalKeys() {
+    if (tapped(isKeyPressed('m') || isKeyPressed('M'), kMute)) toggleMute();
+
+    if (screen != SCR_PLAY || endPopup != END_NONE) return;
+    if (tapped(isKeyPressed('r') || isKeyPressed('R'), kRestart)) restartLevel();
+}
+
+// What BACKSPACE does depends on which screen you are on. It is the
+// "Back" button for every popup that has one.
 void handleBackKey() {
     if (!tapped(isKeyPressed(KEY_BACKSPACE) != 0, kBack)) return;
 
@@ -87,11 +98,13 @@ void handleBackKey() {
             else screen = SCR_MENU;
             break;
         case SCR_CHARACTER: screen = SCR_NAME; break;
-        case SCR_MAP:       screen = SCR_CHARACTER; break;
+        case SCR_MAP:       screen = SCR_MENU; playButton(); break;
         case SCR_SCORES:
         case SCR_HELP:
         case SCR_CREDITS:   screen = SCR_MENU; playButton(); break;
-        case SCR_PLAY:      returnToMenu(); break;
+        // Win / Game Over / Level Up have NO back button, so backspace
+        // only leaves a level while it is still being played.
+        case SCR_PLAY:      if (endPopup == END_NONE) returnToMenu(); break;
         default: break;
     }
 }
@@ -125,30 +138,36 @@ void readNameTyping() {
 }
 
 // ==== 5. UPDATE ====
+// The menu background keeps living on every non-gameplay screen, so the
+// popups always sit over a moving ocean.
+void updateMenuScene() {
+    updateMenuFish();
+    updateEnvironment();
+    updateSeaBubbles();
+}
+
 void fixedUpdate() {
+    handleGlobalKeys();
     handleBackKey();
 
     switch (screen) {
-        case SCR_SPLASH:    updateSplash();          return;
-        case SCR_MENU:      updateMenuFish(); updateEnvironment(); updateMenu(); return;
-        case SCR_NAME:      updateMenuFish(); updateEnvironment(); readNameTyping(); updateNameEntry(); return;
-        case SCR_CHARACTER: updateMenuFish(); updateEnvironment(); updateCharacterSelect(); return;
-        case SCR_MAP:       updateMenuFish(); updateEnvironment(); updateLevelMap(); return;
-        case SCR_SCORES:
+        case SCR_SPLASH:    updateSplash(); return;
+        case SCR_MENU:      updateMenuScene(); updateMenu(); return;
+        case SCR_NAME:      updateMenuScene(); readNameTyping(); updateNamePopup(); return;
+        case SCR_CHARACTER: updateMenuScene(); updateCharacterPopup(); return;
+        case SCR_MAP:       updateMenuScene(); updateLevelMapPopup(); return;
+        case SCR_SCORES:    updateMenuScene(); updateScorePopup(); return;
         case SCR_HELP:
-        case SCR_CREDITS:   updateMenuFish(); updateEnvironment(); return;
+        case SCR_CREDITS:   updateMenuScene(); return;
         case SCR_PLAY:      break;
     }
 
     // --- gameplay ---
-    // Losing every life ends the run too, so the score is saved here as
-    // well as on a win or a timeout.
-    if (isGameOver) { saveRunScore(); return; }
-
-    if (isLevelWon) {
-        // ENTER moves on to the next level once one is finished.
-        if (tapped(isKeyPressed(KEY_ENTER) != 0, kEnter) && currentLevel < MAX_LEVELS)
-            startLevel(currentLevel + 1);
+    refreshEndPopup();
+    if (endPopup != END_NONE) {
+        // A finished run saves its score once, then waits on the popup.
+        if (isGameOver) saveRunScore();
+        updateEndPopup();
         return;
     }
 
@@ -157,10 +176,33 @@ void fixedUpdate() {
 }
 
 // ==== 6. MOUSE ====
-// The only click in the game: scaring a fish on the menu background.
 void iMouse(int button, int state, int mx, int my) {
     if (button != GLUT_LEFT_BUTTON || state != GLUT_DOWN) return;
-    if (screen == SCR_PLAY || screen == SCR_SPLASH) return;
+
+    if (screen == SCR_PLAY) {
+        if (endPopup != END_NONE) return;      // popup is keyboard-driven
+        HudButton b = hudButtonAt(mx, my);
+        if (b == HUD_MUTE) toggleMute();
+        else if (b == HUD_RESTART) restartLevel();
+        return;
+    }
+
+    if (screen == SCR_SPLASH) return;
+
+    // On the menu: the mute button first, then the 5 menu buttons
+    // themselves, then the fish (in that order, so a fish sitting over
+    // a button never steals the click).
+    if (screen == SCR_MENU) {
+        if (clickedMenuMute(mx, my)) { toggleMute(); return; }
+
+        int hit = menuButtonAt(mx, SCREEN_H - my);   // mouse y is from the top
+        if (hit >= 0) {
+            menuIndex = hit;
+            playButton();
+            openMenuChoice();
+            return;
+        }
+    }
     clickMenuFish(mx, my);
 }
 
@@ -169,7 +211,7 @@ void iPassiveMouseMove(int mx, int my) {}
 
 // ==== 7. ONE-SECOND CLOCK ====
 void tickClock() {
-    if (screen == SCR_PLAY && !isGameOver && !isLevelWon) tickLevelClock();
+    if (screen == SCR_PLAY && endPopup == END_NONE) tickLevelClock();
 }
 
 // ==== 8. START ====
@@ -178,11 +220,6 @@ int main() {
 
     iSetTimer(1000, tickClock);
     iInitialize(SCREEN_W, SCREEN_H, "AquaFeast", /*keyboardSamplingRate=*/30);
-
-    // iGraphics does not turn on transparency by default. Without this,
-    // bubbles and the menu's dark veil would draw as solid blocks.
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     loadEverything();
 

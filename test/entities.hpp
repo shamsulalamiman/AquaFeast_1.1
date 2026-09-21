@@ -2,16 +2,23 @@
 #define ENTITIES_HPP
 // =====================================================================
 // entities.hpp - prey fish (food) and predators (danger).
+//
+// Every level uses the SAME movement code. Levels only change the
+// NUMBERS (how many, how fast, how big) - never the logic.
+//
+// Fish animate by cycling through a few sprite frames, so they look
+// like they are really swimming rather than sliding along.
 // =====================================================================
 #include "utility.hpp"
 #include "player.hpp"
 #include "sound.hpp"
 
-#define MAX_PREY      45
-#define MAX_PREDATORS 10
+#define MAX_PREY      60
+#define MAX_PREDATORS 16
 #define PREY_LOOKS     3
+#define SWIM_FRAMES    3    // how many pictures make one swimming cycle
 
-const double CHASE_RANGE = 190.0;  // predator notices you inside this
+const double CHASE_RANGE = 240.0;  // predator notices you inside this
 const int    WARN_TICKS = 22;     // warning shown before it charges
 
 // ==== 1. STRUCTS ====
@@ -21,7 +28,8 @@ struct Prey {
 	double speed;
 	double dx, dy;      // swim direction
 	int    turnTicks;   // ticks until it picks a new direction
-	int    look;        // which of the 3 prey images
+	int    look;        // which of the 3 prey types
+	int    animTick;    // drives the swimming animation
 	Facing facing;
 	bool   alive;
 };
@@ -32,7 +40,8 @@ struct Predator {
 	double speed;
 	double dx, dy;
 	int    turnTicks;
-	int    kind;        // 0 or 1 - which predator artwork
+	int    kind;        // 0,1 = normal predators. 2 = the level's DANGER enemy
+	int    animTick;
 	Facing facing;
 	bool   alive;
 	bool   chasing;
@@ -44,98 +53,116 @@ int preyCount = 0;
 Predator preds[MAX_PREDATORS];
 int predCount = 0;
 
-int preyRight[PREY_LOOKS], preyLeft[PREY_LOOKS];
-int predSprite[2][4];     // [kind][facing]
-int warnSprite;
+// Sprites. [look][frame][facing 0=right 1=left]
+int preySprite[PREY_LOOKS][SWIM_FRAMES][2];
+int predSprite[3][SWIM_FRAMES][4];     // [kind][frame][facing]
+int warnSprite, dangerSprite;
 
 // ==== 2. LOADING ====
+// Loads one fish's animation frames. Frame 1 is the base picture you
+// already have (e.g. prey_small_01.png); frames 2 and 3 are optional
+// extras named _f2 / _f3. Any missing frame falls back to frame 1, so
+// the fish simply glides instead of flapping - it never breaks.
+void loadSwimFrames(int out[SWIM_FRAMES][2], const char* baseRight, const char* baseLeft) {
+	char path[160], stem[160];
+
+	// If there is no left-facing picture at all, every left frame falls
+	// back to the right-facing one rather than to a blank texture.
+	const char* leftBase = imageExists(baseLeft) ? baseLeft : baseRight;
+
+	for (int f = 0; f < SWIM_FRAMES; f++) {
+		if (f == 0) {
+			out[f][0] = loadImg(baseRight);
+			out[f][1] = loadImg(leftBase);
+			continue;
+		}
+		// Build "name_f2.png" from "name.png"
+		strcpy_s(stem, baseRight);
+		char* dot = strrchr(stem, '.');
+		if (dot) *dot = '\0';
+		sprintf_s(path, "%s_f%d.png", stem, f + 1);
+		out[f][0] = loadImg(path, baseRight);
+
+		strcpy_s(stem, leftBase);
+		dot = strrchr(stem, '.');
+		if (dot) *dot = '\0';
+		sprintf_s(path, "%s_f%d.png", stem, f + 1);
+		out[f][1] = loadImg(path, leftBase);
+	}
+}
+
+void loadPredatorFrames(int kind, const char* rightPath, const char* leftPath,
+	const char* upPath, const char* downPath) {
+	char stem[160], path[160];
+	const char* base[4] = { rightPath, leftPath, upPath, downPath };
+
+	for (int f = 0; f < SWIM_FRAMES; f++) {
+		for (int d = 0; d < 4; d++) {
+			if (f == 0) {
+				predSprite[kind][f][d] = loadImg(base[d], rightPath);
+				continue;
+			}
+			strcpy_s(stem, base[d]);
+			char* dot = strrchr(stem, '.');
+			if (dot) *dot = '\0';
+			sprintf_s(path, "%s_f%d.png", stem, f + 1);
+			predSprite[kind][f][d] = loadImg(path, base[d]);
+		}
+	}
+}
+
 void loadEntities() {
-	preyRight[0] = loadImg("Images/Fish/prey_small_01.png");
-	preyLeft[0] = loadImg("Images/Fish/prey_small_01_left.png", "Images/Fish/prey_small_01.png");
-	preyRight[1] = loadImg("Images/Fish/prey_medium_01.png");
-	preyLeft[1] = loadImg("Images/Fish/prey_medium_01_left.png", "Images/Fish/prey_medium_01.png");
-	preyRight[2] = loadImg("Images/Fish/prey_small_02.png");
-	preyLeft[2] = loadImg("Images/Fish/prey_small_02_left.png", "Images/Fish/prey_small_02.png");
+	loadSwimFrames(preySprite[0], "Images/Fish/prey_small_01.png", "Images/Fish/prey_small_01_left.png");
+	loadSwimFrames(preySprite[1], "Images/Fish/prey_medium_01.png", "Images/Fish/prey_medium_01_left.png");
+	loadSwimFrames(preySprite[2], "Images/Fish/prey_small_02.png", "Images/Fish/prey_small_02_left.png");
 
 	warnSprite = loadImg("Images/HUD/warning_icon.png");
+	dangerSprite = loadImg("Images/HUD/danger_icon.png", "Images/HUD/warning_icon.png");
 
-	predSprite[0][FACE_RIGHT] = loadImg("Images/Predators/predator_01_right.png");
-	predSprite[0][FACE_LEFT] = loadImg("Images/Predators/predator_01_left.png");
-	predSprite[0][FACE_UP] = loadImg("Images/Predators/predator_01_up.png", "Images/Predators/predator_01_right.png");
-	predSprite[0][FACE_DOWN] = loadImg("Images/Predators/predator_01_down.png", "Images/Predators/predator_01_right.png");
-
-	predSprite[1][FACE_RIGHT] = loadImg("Images/Predators/predator_02_right.png");
-	predSprite[1][FACE_LEFT] = loadImg("Images/Predators/predator_02_left.png");
-	predSprite[1][FACE_UP] = loadImg("Images/Predators/predator_02_up.png", "Images/Predators/predator_02_right.png");
-	predSprite[1][FACE_DOWN] = loadImg("Images/Predators/predator_02_down.png", "Images/Predators/predator_02_right.png");
+	loadPredatorFrames(0, "Images/Predators/predator_01_right.png", "Images/Predators/predator_01_left.png",
+		"Images/Predators/predator_01_up.png", "Images/Predators/predator_01_down.png");
+	loadPredatorFrames(1, "Images/Predators/predator_02_right.png", "Images/Predators/predator_02_left.png",
+		"Images/Predators/predator_02_up.png", "Images/Predators/predator_02_down.png");
+	// Kind 2 is the "danger" enemy that appears halfway through a level.
+	loadPredatorFrames(2, "Images/Predators/danger_01_right.png", "Images/Predators/danger_01_left.png",
+		"Images/Predators/danger_01_up.png", "Images/Predators/danger_01_down.png");
 }
 
 // ==== 3. SPAWNING ====
 void addPrey(double x, double y, double size, double speed) {
-	int index = -1;
-
-	// Find an empty slot (either at the end, or replacing a dead fish)
-	if (preyCount < MAX_PREY) {
-		index = preyCount++;
-	}
-	else {
-		for (int i = 0; i < MAX_PREY; i++) {
-			if (!preys[i].alive) {
-				index = i;
-				break;
-			}
-		}
-	}
-
-	if (index == -1) return; // Abort if completely full
-
+	if (preyCount >= MAX_PREY) return;
 	Prey f;
 	f.x = x; f.y = y;
 	f.size = size;
 	f.speed = speed;
 	f.look = rand() % PREY_LOOKS;
+	f.animTick = rand() % 60;      // stagger so they don't flap in unison
 	randomDir(f.dx, f.dy, f.turnTicks);
 	f.facing = facingOf(f.dx, f.dy);
 	f.alive = true;
-
-	preys[index] = f;
+	preys[preyCount++] = f;
 }
 
 void addPredator(double x, double y, double size, double speed, int kind) {
-	int index = -1;
-
-	if (predCount < MAX_PREDATORS) {
-		index = predCount++;
-	}
-	else {
-		for (int i = 0; i < MAX_PREDATORS; i++) {
-			if (!preds[i].alive) {
-				index = i;
-				break;
-			}
-		}
-	}
-
-	if (index == -1) return;
-
+	if (predCount >= MAX_PREDATORS) return;
 	Predator p;
 	p.x = x; p.y = y;
 	p.size = size;
 	p.speed = speed;
 	p.kind = kind;
+	p.animTick = rand() % 60;
 	randomDir(p.dx, p.dy, p.turnTicks);
 	p.facing = facingOf(p.dx, p.dy);
 	p.alive = true;
 	p.chasing = false;
 	p.warnTicks = 0;
-
-	preds[index] = p;
+	preds[predCount++] = p;
 }
 
-// ==== 4. MOVEMENT ====
+// ==== 4. MOVEMENT (identical for every level) ====
 void keepInWater(double &y, double &dy, double size) {
-	if (y > SEA_Y - size)     { y = SEA_Y - size;     dy = -fabs(dy); }
-	if (y < FLOOR_Y + size)   { y = FLOOR_Y + size;   dy = fabs(dy); }
+	if (y > SEA_Y - size)   { y = SEA_Y - size;   dy = -fabs(dy); }
+	if (y < FLOOR_Y + size) { y = FLOOR_Y + size; dy = fabs(dy); }
 }
 
 void keepInWorld(double &x, double &dx, double size, double worldWidth) {
@@ -156,20 +183,25 @@ void wander(double &x, double &y, double &dx, double &dy,
 }
 
 void updatePrey(double worldWidth) {
-	for (int i = 0; i < MAX_PREY; i++) {
+	for (int i = 0; i < preyCount; i++) {
 		Prey &f = preys[i];
 		if (!f.alive) continue;
 		wander(f.x, f.y, f.dx, f.dy, f.turnTicks, f.speed, f.size, worldWidth);
 		f.facing = facingOf(f.dx, f.dy);
+		f.animTick++;
 	}
 }
 
+// True when this predator can actually hurt the player. If the player
+// has grown bigger, it is food - so no warning is shown for it.
+bool isDangerous(const Predator &p) { return p.size >= player.size; }
+
 void updatePredators(double worldWidth) {
-	for (int i = 0; i < MAX_PREDATORS; i++) {
+	for (int i = 0; i < predCount; i++) {
 		Predator &p = preds[i];
 		if (!p.alive) continue;
+		p.animTick++;
 
-		// FIXED: Renamed 'near' to 'isNear'
 		bool isNear = dist(p.x, p.y, player.x, player.y) < CHASE_RANGE;
 
 		if (isNear && !p.chasing) {
@@ -199,33 +231,72 @@ void updatePredators(double worldWidth) {
 	}
 }
 
+// Makes every predator faster - used when the level's second half
+// begins and the danger enemy shows up.
+void speedUpPredators(double multiplier) {
+	for (int i = 0; i < predCount; i++) preds[i].speed *= multiplier;
+}
+
+int countLivePrey() {
+	int n = 0;
+	for (int i = 0; i < preyCount; i++) if (preys[i].alive) n++;
+	return n;
+}
+
+// Brings an eaten fish back somewhere else in the level. Without this
+// the ocean would slowly empty out and there would not be enough food
+// left to reach the bigger size goals of levels 2 and 3.
+void respawnOnePrey(double worldWidth, double size, double speed) {
+	for (int i = 0; i < preyCount; i++) {
+		if (preys[i].alive) continue;
+		Prey &f = preys[i];
+		// Come back well away from the player so nothing pops up in
+		// their face.
+		double x = randRange(100, worldWidth - 100);
+		if (fabs(x - player.x) < 420)
+			x = (x < player.x) ? clampD(player.x - 520, 100, worldWidth - 100)
+			: clampD(player.x + 520, 100, worldWidth - 100);
+		f.x = x;
+		f.y = randRange(FLOOR_Y + 80, SEA_Y - 80);
+		f.size = size;
+		f.speed = speed;
+		f.look = rand() % PREY_LOOKS;
+		f.animTick = rand() % 60;
+		randomDir(f.dx, f.dy, f.turnTicks);
+		f.facing = facingOf(f.dx, f.dy);
+		f.alive = true;
+		return;
+	}
+}
+
 // ==== 5. EATING ====
 void eatPrey() {
-	for (int i = 0; i < MAX_PREY; i++) {
+	for (int i = 0; i < preyCount; i++) {
 		Prey &f = preys[i];
 		if (!f.alive) continue;
 		if (!touching(player.x, player.y, player.size, f.x, f.y, f.size)) continue;
 
 		if (player.size > f.size) {
 			f.alive = false;
-			growPlayer(1.4);
+			growPlayer(1.6);
 			stats.score += (int)(f.size * 2);
+			spawnSwimBubble(f.x, f.y);      // little puff where it was eaten
 			playEat();
 		}
 	}
 }
 
 void hitPredators(double worldWidth) {
-	if (player.respawning) return;
+	if (!playerCanMove()) return;   // safe while respawning or hooked
 
-	for (int i = 0; i < MAX_PREDATORS; i++) {
+	for (int i = 0; i < predCount; i++) {
 		Predator &p = preds[i];
 		if (!p.alive) continue;
 		if (!touching(player.x, player.y, player.size, p.x, p.y, p.size)) continue;
 
 		if (player.size > p.size) {
 			p.alive = false;
-			growPlayer(3.0);
+			growPlayer(3.4);
 			stats.score += (int)(p.size * 3);
 			playEat();
 		}
@@ -244,28 +315,36 @@ void updateEntities(double worldWidth) {
 }
 
 // ==== 6. DRAWING ====
+// Cycles through the frames at a steady pace to animate the swim.
+int frameOf(int animTick) { return (animTick / 8) % SWIM_FRAMES; }
+
 void drawEntities() {
-	for (int i = 0; i < MAX_PREY; i++) {
+	for (int i = 0; i < preyCount; i++) {
 		Prey &f = preys[i];
 		if (!f.alive) continue;
-		double s = f.size * 2.0;
 		double sx = toScreenX(f.x);
-		if (sx < -60 || sx > SCREEN_W + 60) continue;   // skip off-screen
-		int sprite = (f.facing == FACE_LEFT) ? preyLeft[f.look] : preyRight[f.look];
-		iShowImage((int)(sx - s / 2), (int)(toScreenY(f.y) - s / 2), (int)s, (int)s, sprite);
+		if (sx < -80 || sx > SCREEN_W + 80) continue;   // skip off-screen
+		double s = f.size * 2.0;
+		int dir = (f.facing == FACE_LEFT) ? 1 : 0;
+		iShowImage((int)(sx - s / 2), (int)(toScreenY(f.y) - s / 2), (int)s, (int)s,
+			preySprite[f.look][frameOf(f.animTick)][dir]);
 	}
 
-	for (int i = 0; i < MAX_PREDATORS; i++) {
+	for (int i = 0; i < predCount; i++) {
 		Predator &p = preds[i];
 		if (!p.alive) continue;
-		double s = p.size * 2.0;
 		double sx = toScreenX(p.x);
-		if (sx < -80 || sx > SCREEN_W + 80) continue;
+		if (sx < -120 || sx > SCREEN_W + 120) continue;
+		double s = p.size * 2.0;
 		iShowImage((int)(sx - s / 2), (int)(toScreenY(p.y) - s / 2), (int)s, (int)s,
-			predSprite[p.kind][p.facing]);
+			predSprite[p.kind][frameOf(p.animTick)][p.facing]);
 
-		if (p.warnTicks > 0)
-			iShowImage((int)(sx - 14), (int)(toScreenY(p.y) + s / 2 + 6), 28, 28, warnSprite);
+		// The warning only appears for enemies that can actually eat
+		// you. Once you outgrow one, it stops being marked as a threat.
+		if (p.warnTicks > 0 && isDangerous(p)) {
+			int icon = (p.kind == 2) ? dangerSprite : warnSprite;
+			iShowImage((int)(sx - 16), (int)(toScreenY(p.y) + s / 2 + 8), 32, 32, icon);
+		}
 	}
 }
 

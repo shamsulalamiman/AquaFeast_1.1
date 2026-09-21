@@ -67,6 +67,9 @@
     <ClCompile Include="iMain.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="ASSET_GUIDE.md" />
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="utility.hpp" />
     <ClInclude Include="sound.hpp" />
     <ClInclude Include="scores.hpp" />
