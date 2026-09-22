@@ -193,11 +193,6 @@ inline void drawPanel(double x, double y, double w, double h,
 // match: dark veil over the scene, a 500x400 panel, a title bar and a
 // title. The caller then draws its own contents inside.
 inline void drawPopupFrame(const char* title) {
-    // Veil the whole screen so the popup stands out.
-    iSetColor(4, 10, 18);
-    for (int i = 0; i < SCREEN_H; i += 4)      // gaps let the scene show through
-        iFilledRectangle(0, i, SCREEN_W, 2);
-
     drawPanel(POPUP_X, POPUP_Y, POPUP_W, POPUP_H, 14, 30, 48, 90, 170, 215);
     // Inner highlight line, gives the panel a little depth.
     iSetColor(40, 80, 110);

@@ -210,7 +210,6 @@ int menuButtonAt(double px, double py) {
 // A loading page with a progress bar and a fish that swims along it.
 void drawSplash() {
     iShowImage(0, 0, SCREEN_W, SCREEN_H, splashImage);
-	loadingSound();
     double barW = 640, barH = 26;
     double x = SCREEN_W / 2.0 - barW / 2, y = 180;
     double pct = clampD((double)splashTicks / SPLASH_LENGTH, 0, 1);
@@ -235,7 +234,7 @@ void updateSplash() {
     bool skip = tapped(isKeyPressed(KEY_ENTER) != 0, kEnter);
     if (splashTicks >= SPLASH_LENGTH || skip) {
         screen = SCR_MENU;
-        startMenuMusic();
+        ensureMusicPlaying();   // starts once here, then just keeps playing forever
     }
 }
 
@@ -246,8 +245,6 @@ void drawMenu() {
 
     for (int i = 0; i < MENU_COUNT; i++)
         drawMenuButton(SCREEN_W / 2.0, menuButtonY(i), MENU_BTN_W, MENU_BTN_H, menuLabels[i], i == menuIndex);
-
-	char buf[64];
 
     // Mute button, bottom right, matching the HUD one.
     iShowImage(SCREEN_W - 80, 25, 44, 44, isMuted ? icoMuteOff : icoMuteOn);
@@ -414,8 +411,7 @@ void drawScorePopup() {
     for (int i = 0; i < show; i++) {
         char row[80];
         sprintf_s(row, "%d.  %-14s %6d", i + 1, scoreTable[i].name, scoreTable[i].score);
-        int bright = (i == 0) ? 220 : 255;
-		iText(POPUP_X + 60, POPUP_Y + 250 - i * 32, row, GAME_FONT);
+        iText(POPUP_X + 60, POPUP_Y + 250 - i * 32, row, GAME_FONT);
     }
 
 	drawPopupButton(SCREEN_W / 2.0, POPUP_Y - 50, 200, "BACK", false);
@@ -485,8 +481,6 @@ void returnToMenu() {
     menuIndex = 0;
     currentLevel = 1;   // the menu always shows the bright level-1 ocean
     scrollX = 0;
-    stopGameMusic();
-    startMenuMusic();
 }
 
 void updateEndPopup() {

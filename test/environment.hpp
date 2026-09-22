@@ -15,12 +15,12 @@
 #define MAX_CLOUDS    5
 #define MAX_BIRDS     3
 #define BIRD_FRAMES   3
-#define MAX_WEEDS    20    // enough to cover the whole sea floor
+#define MAX_WEEDS    50    // enough to cover the sea floor across the widest level (4200 wide)
 #define MAX_RAIN    160
 
 // ==== 1. STRUCTS ====
 struct Drifter { double x, y, speed; };
-struct Weed    { double x; int look; double w, h; };
+struct Weed    { double x; int look; };
 struct Rain    { double x, y, speed; };
 
 Drifter clouds[MAX_CLOUDS];
@@ -56,13 +56,12 @@ void loadEnvironment() {
     for (int i = 0; i < MAX_BIRDS; i++)
         birds[i].x = i * 520.0 + 200, birds[i].y = SEA_Y + 185 + i * 42.0, birds[i].speed = -(0.9 + i * 0.22);
 
-    // Seaweed is packed close together with varied size so the sand is
-    // fully covered rather than dotted with a few plants.
+    // Seaweed is packed close together so the sand is fully covered
+    // rather than dotted with a few plants. 50 weeds x 90 spacing
+    // covers 4500 world units, more than the widest level (4200).
     for (int i = 0; i < MAX_WEEDS; i++) {
-        weeds[i].x = i * 92.0 + randRange(-24, 24);
+        weeds[i].x = i * 90.0 + randRange(-20, 20);
         weeds[i].look = rand() % 3;
-        weeds[i].w = randRange(58, 104);
-        weeds[i].h = randRange(74, 132);
     }
 
     for (int i = 0; i < MAX_RAIN; i++)
@@ -71,7 +70,12 @@ void loadEnvironment() {
 
 void resetEnvironment(double levelWidth) { worldW = levelWidth; }
 
-void followPlayer() { scrollX = clampD(player.x, 0, worldW); }
+// scrollX must stay between CENTER_X and (worldW - CENTER_X): that is
+// the range where a full screen-width of world is always in view. The
+// old clamp of [0, worldW] let the camera slide past the true left/right
+// edges of the ocean, which is the "ocean width" bug - the player would
+// end up off-centre and part of the screen showed nothing at all.
+void followPlayer() { scrollX = clampD(player.x, CENTER_X, worldW - CENTER_X); }
 
 // ==== 3. UNDERWATER ====
 void drawWaterBands() {

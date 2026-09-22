@@ -37,11 +37,16 @@ struct LevelInfo {
 
 LevelInfo levels[MAX_LEVELS + 1];   // index 0 unused, levels 1..3
 
+// Ordinary prey/predators are SMALLER than before across the board - the
+// danger enemy is the one thing that stays big, so it stands out as the
+// obvious "big fish" the moment it arrives. Level 2 and 3 also get more
+// predators and a faster pace, so they read as clearly more complex
+// than level 1, not just re-skinned versions of it.
 void setupLevels() {
     //              width   goal secs prey pSpd prd pSpd pSize dng dSpd dSize name
-    levels[1] = { 2600.0,  70.0, 120,  32, 1.6,   3, 2.2, 44.0,  1, 3.6, 54.0, "BARRACUDA" };
-    levels[2] = { 3400.0,  96.0, 100,  30, 2.2,   5, 3.0, 50.0,  2, 4.5, 62.0, "NIGHT SHARK" };
-    levels[3] = { 4200.0, 124.0,  85,  28, 2.9,   7, 3.8, 56.0,  3, 5.4, 70.0, "STORM HUNTER" };
+    levels[1] = { 2600.0,  60.0, 120,  32, 1.6,   4, 2.2, 30.0,  1, 3.6, 66.0, "BARRACUDA" };
+    levels[2] = { 3400.0,  84.0, 100,  30, 2.4,   9, 3.4, 34.0,  4, 5.0, 78.0, "NIGHT SHARK" };
+    levels[3] = { 4200.0, 108.0,  85,  28, 3.1,  13, 4.4, 38.0,  6, 6.2, 90.0, "STORM HUNTER" };
 }
 
 void loadLevels() { setupLevels(); }
@@ -99,7 +104,7 @@ void spawnForLevel(int n) {
         double y = randRange(FLOOR_Y + 80, SEA_Y - 80);
         // A few larger prey appear from level 2 on - worth more points,
         // but you must grow before you can eat them.
-        double size = (n >= 2 && i % 4 == 0) ? randRange(34, 46) : randRange(17, 25);
+        double size = (n >= 2 && i % 4 == 0) ? randRange(24, 32) : randRange(12, 18);
         addPrey(x, y, size, L.preySpeed);
     }
 
@@ -130,8 +135,6 @@ void startLevel(int n) {
     isLevelWon = false;
 
     screen = SCR_PLAY;
-    stopMenuMusic();
-    startGameMusic();
 }
 
 // Restart the level currently being played, from the HUD button.
@@ -169,7 +172,7 @@ void updateLevel() {
     if (respawnTick <= 0) {
         respawnTick = 45;
         if (countLivePrey() < L.preyCount)
-            respawnOnePrey(L.width, randRange(17, 25) + player.size * 0.12, L.preySpeed);
+            respawnOnePrey(L.width, randRange(12, 18) + player.size * 0.10, L.preySpeed);
     }
 
     stats.progress = player.size / L.goalSize;
@@ -184,7 +187,6 @@ void updateLevel() {
         if (currentLevel >= unlockedLevel && currentLevel < MAX_LEVELS)
             unlockedLevel = currentLevel + 1;        // unlock the next level
         saveRunScore();
-        stopGameMusic();
         playWin();
     }
 }

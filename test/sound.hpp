@@ -7,6 +7,13 @@
 // Windows function that plays .mp3 files. iGraphics has no audio of
 // its own, so this is the standard way to add sound on Windows.
 // (winmm.lib is linked in iMain.cpp.)
+//
+// MUSIC: there is now only ONE background track (bgMusic.mp3). It
+// starts once, the moment the splash screen finishes, and just keeps
+// playing continuously through the menu, every popup, AND gameplay -
+// it is never stopped or restarted, only paused/resumed by mute. The
+// short one-shot sounds (eat/collect/win/lose/etc.) all play over it
+// normally, since each mp3 alias is independent.
 // =====================================================================
 #include <windows.h>
 #include <mmsystem.h>
@@ -31,9 +38,9 @@ void loadSounds() {
     openSound("Sound/swim.mp3",      "sndSwim");
     openSound("Sound/struggle.mp3",  "sndStruggle");
     openSound("Sound/alert.mp3",     "sndAlert");
-    openSound("Sound/bgMusic.mp3",   "musGame");
-    openSound("Sound/gamestart.mp3", "musMenu");
-	openSound("Sound/loading.mp3", "loading");
+    openSound("Sound/bgMusic.mp3",   "musBg");
+    // gamestart.mp3 is no longer used as separate menu music (see the
+    // MUSIC note above) - bgMusic.mp3 alone now covers menu+gameplay.
 }
 
 inline void playSound(const char* alias) {
@@ -55,7 +62,6 @@ void playCollect() { playSound("sndCollect"); }
 void playWin()     { playSound("sndWin"); }
 void playLose()    { playSound("sndLose"); }
 void playAlert()   { playSound("sndAlert"); }
-void loadingSound()   { playSound("loading"); }
 
 // Short sounds that would machine-gun if played every frame get a
 // cooldown, so they space out into one natural-sounding effect.
@@ -87,24 +93,34 @@ void tickSoundCooldowns() {
     if (struggleCooldown > 0) struggleCooldown--;
 }
 
-void startGameMusic() { if (!isMuted) mciSendString("play musGame from 0 repeat", NULL, 0, NULL); }
-void stopGameMusic()  { mciSendString("stop musGame", NULL, 0, NULL); }
-void startMenuMusic() { if (!isMuted) mciSendString("play musMenu from 0 repeat", NULL, 0, NULL); }
-void stopMenuMusic()  { mciSendString("stop musMenu", NULL, 0, NULL); }
+// ==== THE ONE CONTINUOUS BACKGROUND TRACK ====
+bool musicStarted = false;
 
+// Called once, right when the splash screen finishes (see menu.hpp's
+// updateSplash()). After that it is never called again - the track
+// just keeps looping for the rest of the session.
+void ensureMusicPlaying() {
+    if (musicStarted) return;
+    musicStarted = true;
+    if (!isMuted) mciSendString("play musBg from 0 repeat", NULL, 0, NULL);
+}
+
+// Mute PAUSES the track (so unmuting resumes from the same spot)
+// instead of stopping it, which is what "runs all the time" means -
+// muting is not the same as the music restarting later.
 void toggleMute() {
     isMuted = !isMuted;
-    if (isMuted) { stopGameMusic(); stopMenuMusic(); return; }
-    if (screen == SCR_PLAY) startGameMusic();
-    else startMenuMusic();
+    if (!musicStarted) return;
+    if (isMuted) mciSendString("pause musBg", NULL, 0, NULL);
+    else          mciSendString("resume musBg", NULL, 0, NULL);
 }
 
 // Game over can be triggered from more than one place, so it lives here
-// - that way the lose sound can only ever fire once.
+// - that way the lose sound can only ever fire once. The music itself
+// keeps playing straight through a game over.
 void triggerGameOver() {
     if (isGameOver) return;
     isGameOver = true;
-    stopGameMusic();
     playLose();
 }
 

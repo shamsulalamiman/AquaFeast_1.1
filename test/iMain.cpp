@@ -63,18 +63,24 @@ void iDraw() {
 
 // ==== 3. GAMEPLAY INPUT ====
 void handleGameKeys() {
+    // SPACE always goes through the SAME tap detector, whether hooked or
+    // not - one press does one thing (one jump, or one tug-of-war tap),
+    // instead of jumping using a held-key check while the hook used a
+    // tap check. This also stops holding Space from auto-bouncing the
+    // fish the instant it lands.
+    bool spaceTapped = tapped(isKeyPressed(KEY_SPACE) != 0, kSpace);
+
     // While hooked, swimming is disabled - only SPACE matters.
     if (playerIsHooked()) {
-        if (tapped(isKeyPressed(KEY_SPACE) != 0, kSpace)) hookSpaceTap();
+        if (spaceTapped) hookSpaceTap();
         return;
     }
-    kSpace = isKeyPressed(KEY_SPACE) != 0;   // keep the tap detector in sync
 
     if (keyLeft())  movePlayer(-1, 0);
     if (keyRight()) movePlayer(1, 0);
     if (keyUp())    movePlayer(0, 1);
     if (keyDown())  movePlayer(0, -1);
-    if (isKeyPressed(KEY_SPACE)) startJump();
+    if (spaceTapped) startJump();
 }
 
 // Mute (M) and Restart (R) work during play, from the keyboard or from
